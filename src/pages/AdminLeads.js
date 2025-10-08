@@ -1,0 +1,336 @@
+import React, { useEffect, useMemo, useState } from "react";
+
+const API_BASE = (
+  process.env.REACT_APP_API_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
+const ADMIN_API_KEY = process.env.REACT_APP_ADMIN_API_KEY || ""; // opcional
+
+// Helpers
+const ESTADOS = [
+  { value: "", label: "Todos" },
+  { value: "nuevo", label: "Nuevo" },
+  { value: "contactado", label: "Contactado" },
+  { value: "agregado", label: "Agregado" },
+  { value: "descartado", label: "Descartado" },
+];
+const estadoBadge = (e) =>
+  ({
+    nuevo: "bg-primary",
+    contactado: "bg-warning text-dark",
+    agregado: "bg-success",
+    descartado: "bg-danger",
+  }[e] || "bg-secondary");
+
+function useDebouncedValue(value, delay = 450) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
+}
+
+const toCSV = (rows) => {
+  if (!rows?.length) return "";
+  const heads = [
+    "id",
+    "nombre",
+    "telefono",
+    "sucursal",
+    "estado",
+    "nota",
+    "created_at",
+  ];
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [heads.join(",")].concat(
+    rows.map((r) =>
+      [
+        r.id,
+        esc(r.nombre),
+        esc(r.telefono),
+        esc(r.sucursal || ""),
+        r.estado || "",
+        esc(r.nota || ""),
+        r.created_at || "",
+      ].join(",")
+    )
+  );
+  return lines.join("\n");
+};
+
+export default function AdminLeads() {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
+  const [estado, setEstado] = useState("");
+  const [q, setQ] = useState("");
+  const qDebounced = useDebouncedValue(q, 500);
+
+  // paginación client-side
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+
+  const headers = useMemo(() => {
+    const h = { "Content-Type": "application/json" };
+    if (ADMIN_API_KEY) h["x-api-key"] = ADMIN_API_KEY;
+    return h;
+  }, []);
+
+  const fetchClientes = async () => {
+    setLoading(true);
+    setToast("");
+    try {
+      const url = new URL(`${API_BASE}/admin/clientes`);
+      if (estado) url.searchParams.append("estado", estado);
+      if (qDebounced) url.searchParams.append("q", qDebounced);
+      url.searchParams.append("limit", "1000");
+      const res = await fetch(url.toString(), { headers });
+      const json = await res.json();
+      setData(Array.isArray(json) ? json : []);
+      setPage(1);
+    } catch (e) {
+      setToast("No se pudo cargar la lista.");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClientes(); /* eslint-disable-next-line */
+  }, [estado, qDebounced]);
+
+  const total = data.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageData = data.slice((page - 1) * pageSize, page * pageSize);
+
+  const setEstadoLead = async (id, nuevo) => {
+    try {
+      await fetch(`${API_BASE}/admin/clientes/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ estado: nuevo }),
+      });
+      setData((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, estado: nuevo } : r))
+      );
+      setToast(`Estado actualizado a "${nuevo}".`);
+    } catch {
+      setToast("No se pudo actualizar el estado.");
+    }
+  };
+
+  const copyPhone = async (phone) => {
+    try {
+      await navigator.clipboard.writeText(String(phone || ""));
+      setToast("WhatsApp copiado.");
+    } catch {
+      setToast("No se pudo copiar.");
+    }
+  };
+
+  const downloadCSV = () => {
+    const csv = toCSV(data);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement("a"), {
+      href: url,
+      download: "clientes_comunidad.csv",
+    });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="container py-4">
+      <div className="d-flex flex-column flex-md-row align-items-md-end justify-content-between mb-3">
+        <div>
+          <h1 className="h4 mb-1">Leads / Comunidad</h1>
+          <small className="text-muted">
+            Gestioná los contactos que dejaron su WhatsApp.
+          </small>
+        </div>
+        <div className="d-flex gap-2 mt-3 mt-md-0">
+          <button onClick={fetchClientes} className="btn btn-dark">
+            Actualizar
+          </button>
+          <button onClick={downloadCSV} className="btn btn-outline-secondary">
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="row g-2 mb-3">
+        <div className="col-12 col-md-6">
+          <input
+            className="form-control"
+            placeholder="Buscar por nombre o WhatsApp…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <div className="col-6 col-md-3">
+          <select
+            className="form-select"
+            value={estado}
+            onChange={(e) => setEstado(e.target.value)}
+          >
+            {ESTADOS.map((e) => (
+              <option key={e.value} value={e.value}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Toast simple */}
+      {toast && (
+        <div
+          className="alert alert-dark d-flex align-items-center justify-content-between py-2"
+          role="status"
+        >
+          <span className="me-3">ℹ️ {toast}</span>
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => setToast("")}
+            aria-label="Close"
+          ></button>
+        </div>
+      )}
+
+      <div className="table-responsive shadow-sm">
+        <table className="table table-hover align-middle mb-0">
+          <thead className="table-light">
+            <tr>
+              <th>Nombre</th>
+              <th>WhatsApp</th>
+              <th>Sucursal</th>
+              <th>Estado</th>
+              <th style={{ minWidth: 180 }}>Nota</th>
+              <th>Fecha</th>
+              <th className="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              [...Array(6)].map((_, i) => (
+                <tr key={i}>
+                  <td colSpan="7">
+                    <div className="placeholder-glow py-3">
+                      <span className="placeholder col-12"></span>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : pageData.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center text-muted py-4">
+                  Sin resultados.
+                </td>
+              </tr>
+            ) : (
+              pageData.map((c) => (
+                <tr key={c.id}>
+                  <td className="fw-semibold">{c.nombre}</td>
+                  <td>
+                    <span className="font-monospace">{c.telefono}</span>{" "}
+                    <button
+                      className="btn btn-sm btn-outline-secondary ms-1"
+                      onClick={() => copyPhone(c.telefono)}
+                      title="Copiar"
+                    >
+                      Copiar
+                    </button>
+                  </td>
+                  <td>{c.sucursal || "-"}</td>
+                  <td>
+                    <span className={`badge ${estadoBadge(c.estado)}`}>
+                      {c.estado || "—"}
+                    </span>
+                  </td>
+                  <td
+                    className="text-truncate"
+                    style={{ maxWidth: 260 }}
+                    title={c.nota || ""}
+                  >
+                    {c.nota || "—"}
+                  </td>
+                  <td>
+                    {c.created_at
+                      ? new Date(c.created_at).toLocaleDateString()
+                      : "-"}
+                  </td>
+                  <td className="text-end">
+                    <div className="btn-group btn-group-sm">
+                      <button
+                        className="btn btn-warning"
+                        onClick={() => setEstadoLead(c.id, "contactado")}
+                      >
+                        Contactado
+                      </button>
+                      <button
+                        className="btn btn-success"
+                        onClick={() => setEstadoLead(c.id, "agregado")}
+                      >
+                        Agregado
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => setEstadoLead(c.id, "descartado")}
+                      >
+                        Descartado
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Paginación */}
+      <nav className="d-flex justify-content-between align-items-center mt-3">
+        <small className="text-muted">
+          {total > 0 ? (
+            <>
+              Mostrando <strong>{(page - 1) * pageSize + 1}</strong>–
+              <strong>{Math.min(page * pageSize, total)}</strong> de{" "}
+              <strong>{total}</strong>
+            </>
+          ) : (
+            <>Sin registros</>
+          )}
+        </small>
+        <ul className="pagination mb-0">
+          <li className={`page-item ${page === 1 ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </button>
+          </li>
+          <li className="page-item disabled">
+            <span className="page-link">
+              Página {page} / {totalPages}
+            </span>
+          </li>
+          <li className={`page-item ${page === totalPages ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  );
+}

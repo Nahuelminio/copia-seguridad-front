@@ -1,24 +1,180 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+  Navigate,
+} from "react-router-dom";
+
+import Navbar from "./components/Navbar";
+import ProductoPage from "./pages/ProductoPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import SucursalDashboard from "./pages/SucursalDashboard";
+import RegistrarVenta from "./components/RegistrarVenta";
+import CrearSucursal from "./pages/CrearSucursal";
+import HistorialVentas from "./components/HistorialVentas";
+import VentasMensuales from "./components/VentasMensuales";
+import HistorialReposiciones from "./components/HistorialReposiciones";
+import RegistrarReposicion from "./components/RegistrarReposicion";
+import ReposicionRapida from "./pages/ReposicionRapida";
+import HistorialPagos from "./components/HistorialPagos";
+import Login from "./pages/Login";
+import ResumenGanancias from "./pages/ResumenGanancias";
+
+import PrivateRoute from "./utils/PrivateRoute";
+import { getUsuario } from "./utils/auth";
+
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import PodsPorSucursalPage from "./pages/PodsPorSucursalPage";
+import AdminLeads from "./pages/AdminLeads";
+
+// Componente wrapper para mostrar el Navbar solo si no está en login
+const AppLayout = ({ children }) => {
+  const location = useLocation();
+  const usuario = getUsuario();
+  const mostrarNavbar = usuario && location.pathname !== "/login";
+
+  return (
+    <>
+      {mostrarNavbar && <Navbar />}
+      {children}
+    </>
+  );
+};
+
+// Wrapper para decidir qué dashboard cargar según el rol
+const DashboardWrapper = () => {
+  const usuario = getUsuario();
+  return usuario?.rol === "admin" ? <AdminDashboard /> : <SucursalDashboard />;
+};
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <AppLayout>
+        <Routes>
+          {/* Login público */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Dashboard según rol */}
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <DashboardWrapper />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Rutas comunes */}
+          <Route
+            path="/productos"
+            element={
+              <PrivateRoute>
+                <ProductoPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/productosTotal"
+            element={
+              <PrivateRoute>
+                <PodsPorSucursalPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/vender"
+            element={
+              <PrivateRoute>
+                <RegistrarVenta />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/historial-pagos"
+            element={
+              <PrivateRoute>
+                <HistorialPagos />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Solo admin */}
+          <Route
+            path="/resumen-ganancias"
+            element={
+              <PrivateRoute>
+                <ResumenGanancias />
+              </PrivateRoute>
+            }
+          />
+          {/* Solo admin */}
+          <Route
+            path="/clientes"
+            element={
+              <PrivateRoute>
+                <AdminLeads />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/crear-sucursal"
+            element={
+              <PrivateRoute>
+                <CrearSucursal />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/historial"
+            element={
+              <PrivateRoute>
+                <HistorialVentas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ventasMensuales"
+            element={
+              <PrivateRoute>
+                <VentasMensuales />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/historialReposiciones"
+            element={
+              <PrivateRoute>
+                <HistorialReposiciones />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/registrarReposicion"
+            element={
+              <PrivateRoute>
+                <RegistrarReposicion />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/reposicion-rapida"
+            element={
+              <PrivateRoute>
+                <ReposicionRapida />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Default: redirige al dashboard */}
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </Routes>
+      </AppLayout>
+    </Router>
   );
 }
 

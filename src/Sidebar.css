@@ -1,0 +1,87 @@
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100vh;
+  background-color: #212529;
+  color: white;
+  padding: 1rem;
+  transition: transform 0.3s ease-in-out;
+  z-index: 1000;
+}
+
+.sidebar .brand {
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.sidebar .nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar .nav-links a,
+.sidebar .dropdown-section button {
+  color: white;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.sidebar .nav-links a.active {
+  font-weight: bold;
+  color: #0dcaf0;
+}
+
+.sidebar .submenu {
+  margin-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1100;
+  background: #212529;
+  color: white;
+  border: none;
+  font-size: 24px;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+/* Responsive para mobile */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .hamburger-btn {
+    display: block;
+  }
+}
+
+/* Para que el contenido principal no quede detrás */
+body {
+  margin-left: 240px;
+}
+
+@media (max-width: 768px) {
+  body {
+    margin-left: 0;
+  }
+}

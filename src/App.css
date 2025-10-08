@@ -6,6 +6,19 @@
   height: 40vmin;
   pointer-events: none;
 }
+.dropdown-menu {
+  background-color: #343a40; /* dark */
+}
+.dropdown-item {
+  color: #fff;
+}
+.dropdown-item:hover {
+  background-color: #495057;
+}
+.navbar .btn-link {
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+}
 
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
@@ -14,7 +27,7 @@
 }
 
 .App-header {
-  background-color: #282c34;
+  background-color: #000000;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
