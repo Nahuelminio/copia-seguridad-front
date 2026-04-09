@@ -1,82 +1,105 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axios from "../utils/axiosInstance";
 import { jwtDecode } from "jwt-decode";
+import { toast } from "react-toastify";
+
+const iStyle = {
+  background: "#0d1526",
+  border: "1px solid #1e293b",
+  color: "#e2e8f0",
+  borderRadius: "8px",
+};
+
+const lStyle = {
+  color: "#94a3b8",
+  fontSize: "0.82rem",
+  marginBottom: "4px",
+};
 
 function ReposicionRapida() {
   const [gustos, setGustos] = useState([]);
   const [gustoId, setGustoId] = useState("");
   const [cantidad, setCantidad] = useState(1);
   const [sucursalNombre, setSucursalNombre] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const API = process.env.REACT_APP_API_URL;
   const token = localStorage.getItem("token");
   const decoded = token ? jwtDecode(token) : null;
   const sucursalId = decoded?.sucursalId;
 
-  // Obtener gustos disponibles para esta sucursal
   useEffect(() => {
     if (!sucursalId || !token) return;
 
     axios
-      .get(`${API}/productos/disponibles?sucursal_id=${sucursalId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      .get(`/productos/disponibles?sucursal_id=${sucursalId}`)
       .then((res) => setGustos(res.data))
-      .catch(() => alert("Error al obtener productos"));
+      .catch(() => toast.error("Error al obtener productos"));
 
     axios
-      .get(`${API}/sucursales`)
+      .get("/sucursales")
       .then((res) => {
         const sucursal = res.data.find((s) => s.id === sucursalId);
         if (sucursal) setSucursalNombre(sucursal.nombre);
       })
       .catch(() => {});
-  }, [API, sucursalId, token]); // ✅ dependencias completas
+  }, [sucursalId, token]);
 
-  const enviar = (e) => {
+  const enviar = async (e) => {
     e.preventDefault();
     if (!gustoId || cantidad < 1) {
-      alert("Completá todos los campos");
+      toast.error("Completá todos los campos");
       return;
     }
-
-    axios
-      .post(
-        `${API}/productos/reposicion-rapida`,
-        {
-          gusto_id: gustoId,
-          cantidad: parseInt(cantidad),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-      .then(() => {
-        alert("✅ Reposición rápida realizada");
-        setCantidad(1);
-        setGustoId("");
-      })
-      .catch(() => alert("❌ Error al hacer reposición"));
+    try {
+      setLoading(true);
+      await axios.post("/productos/reposicion-rapida", {
+        gusto_id: gustoId,
+        cantidad: parseInt(cantidad),
+      });
+      toast.success("Reposición rápida registrada");
+      setCantidad(1);
+      setGustoId("");
+    } catch {
+      toast.error("Error al hacer reposición");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="container mt-4">
-      <h2>🚚 Reposición Rápida</h2>
-      <p className="text-muted">
-        Sucursal actual: <strong>{sucursalNombre || sucursalId}</strong>
-      </p>
+    <div className="container mt-5" style={{ maxWidth: 560 }}>
+      <div className="mb-4">
+        <h4 style={{ color: "#f1f5f9", fontWeight: 700, marginBottom: 2 }}>
+          Reposición Rápida
+        </h4>
+        <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>
+          Sucursal:{" "}
+          <span style={{ color: "#94a3b8", fontWeight: 600 }}>
+            {sucursalNombre || sucursalId || "—"}
+          </span>
+        </p>
+      </div>
 
-      <form onSubmit={enviar} className="row g-3">
-        <div className="col-md-6">
-          <label className="form-label">🧃 Producto - Gusto</label>
+      <form
+        onSubmit={enviar}
+        style={{
+          background: "#111827",
+          border: "1px solid #1e293b",
+          borderRadius: 14,
+          padding: "28px 28px 24px",
+        }}
+      >
+        <div className="mb-3">
+          <label style={lStyle}>Producto - Gusto</label>
           <select
             className="form-select"
             value={gustoId}
             onChange={(e) => setGustoId(e.target.value)}
+            required
+            disabled={loading}
+            style={iStyle}
           >
-            <option value="">Seleccionar</option>
+            <option value="">Seleccionar producto</option>
             {gustos.map((g) => (
               <option key={g.gusto_id} value={g.gusto_id}>
                 {g.producto_nombre} - {g.gusto}
@@ -85,20 +108,41 @@ function ReposicionRapida() {
           </select>
         </div>
 
-        <div className="col-md-3">
-          <label className="form-label">🔢 Cantidad</label>
+        <div className="mb-4">
+          <label style={lStyle}>Cantidad</label>
           <input
             type="number"
             className="form-control"
             value={cantidad}
             onChange={(e) => setCantidad(e.target.value)}
             min="1"
+            required
+            disabled={loading}
+            style={iStyle}
           />
         </div>
 
-        <div className="col-md-3 d-flex align-items-end">
-          <button className="btn btn-success w-100">Reponer</button>
-        </div>
+        <button
+          type="submit"
+          className="w-100"
+          disabled={!gustoId || cantidad < 1 || loading}
+          style={{
+            background:
+              !gustoId || cantidad < 1 || loading
+                ? "#1e293b"
+                : "linear-gradient(135deg, #10b981, #059669)",
+            border: "none",
+            borderRadius: 9,
+            color: !gustoId || cantidad < 1 || loading ? "#475569" : "#fff",
+            fontWeight: 600,
+            fontSize: "0.95rem",
+            padding: "11px 0",
+            cursor: !gustoId || cantidad < 1 || loading ? "not-allowed" : "pointer",
+            transition: "opacity 0.2s",
+          }}
+        >
+          {loading ? "Registrando..." : "Reponer"}
+        </button>
       </form>
     </div>
   );

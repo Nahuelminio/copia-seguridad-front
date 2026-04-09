@@ -5,11 +5,23 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #000000;
-background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 1200 800'%3E%3Cdefs%3E%3CradialGradient id='a' cx='0' cy='800' r='800' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%230e0e0e'/%3E%3Cstop offset='1' stop-color='%230e0e0e' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='b' cx='1200' cy='800' r='800' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%231b1a1a'/%3E%3Cstop offset='1' stop-color='%231b1a1a' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='c' cx='600' cy='0' r='600' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23282827'/%3E%3Cstop offset='1' stop-color='%23282827' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='d' cx='600' cy='800' r='600' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23000000'/%3E%3Cstop offset='1' stop-color='%23000000' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='e' cx='0' cy='0' r='800' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%231B1B1B'/%3E%3Cstop offset='1' stop-color='%231B1B1B' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='f' cx='1200' cy='0' r='800' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23353433'/%3E%3Cstop offset='1' stop-color='%23353433' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect fill='url(%23a)' width='1200' height='800'/%3E%3Crect fill='url(%23b)' width='1200' height='800'/%3E%3Crect fill='url(%23c)' width='1200' height='800'/%3E%3Crect fill='url(%23d)' width='1200' height='800'/%3E%3Crect fill='url(%23e)' width='1200' height='800'/%3E%3Crect fill='url(%23f)' width='1200' height='800'/%3E%3C/svg%3E");
-background-attachment: fixed;
-background-size: cover;
+  background-color: #080d14;
+  background-image: radial-gradient(ellipse at 20% 50%, rgba(17, 35, 60, 0.4) 0%, transparent 60%),
+                    radial-gradient(ellipse at 80% 20%, rgba(10, 25, 47, 0.3) 0%, transparent 50%);
+  background-attachment: fixed;
   color: white;
+}
+
+/* Input oscuro - placeholder y focus */
+.input-dark::placeholder {
+  color: #64748b;
+}
+.input-dark:focus {
+  background: #1a2236 !important;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+  outline: none;
 }
 
 /* Card con sombra */
@@ -158,15 +170,39 @@ background-size: cover;
 }
 
 .dropdown-menu {
-  background-color: #343a40;
+  background-color: #0f1623;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 
 .dropdown-item {
-  color: #fff;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  padding: 0.5rem 1.2rem;
 }
 
 .dropdown-item:hover {
-  background-color: #495057;
+  background-color: #1e293b;
+  color: #fff;
+}
+
+.navbar .nav-link,
+.navbar .nav-item .btn-link,
+.navbar .dropdown-toggle {
+  font-size: 0.95rem;
+  color: #cbd5e1 !important;
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+
+.navbar .nav-link:hover,
+.navbar .nav-link.active,
+.navbar .nav-item .btn-link:hover,
+.navbar .dropdown-toggle:hover {
+  color: #fff !important;
 }
 
 .navbar .btn-link {
@@ -237,4 +273,15 @@ border: 1px solid white;
     font-size: 14px;
     padding: 0.6em 2em;
   }
+}
+/* celestito tipo Bootstrap alert-info */
+.autocomplete-active {
+  background-color: #cff4fc !important;
+  border-color: #b6effb !important;
+  color: #055160 !important;
+}
+
+/* hover suave */
+.list-group-item-action:hover {
+  background-color: #e7f8fb !important;
 }

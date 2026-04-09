@@ -6,56 +6,121 @@ import FormularioPagoSucursal from "../components/FormularioPagoSucursal";
 import ProductoEditorMasivo from "./ProductoEditorMasivo";
 import RankingProductosModal from "../components/estadisticas/RankingProductosModal";
 
+const cardStyle = {
+  background: "#111827",
+  border: "1px solid #1e293b",
+  borderRadius: 12,
+  padding: "24px",
+};
+
+const sectionLabelStyle = {
+  color: "#64748b",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  marginBottom: 16,
+};
+
 function AdminDashboard() {
   const [recargarResumen, setRecargarResumen] = useState(false);
   const [mostrarEditorMasivo, setMostrarEditorMasivo] = useState(false);
 
   const manejarPagoExitoso = () => setRecargarResumen((prev) => !prev);
 
-  const abrirModalPago = () => {
-    const modalEl = document.getElementById("modalPago");
-    if (modalEl) {
-      setTimeout(() => {
-        new window.bootstrap.Modal(modalEl).show();
-      }, 100);
+  const abrirModal = (id) => {
+    const modalEl = document.getElementById(id);
+    if (modalEl && window.bootstrap?.Modal) {
+      setTimeout(() => new window.bootstrap.Modal(modalEl).show(), 100);
     }
   };
 
-  const abrirModalRanking = () => {
-    const modalEl = document.getElementById("modalRankingProductos");
-    if (modalEl) {
-      setTimeout(() => {
-        new window.bootstrap.Modal(modalEl).show();
-      }, 100);
-    } else {
-      console.log("❌ No se encontró el modal");
-    }
-  };
+  const acciones = [
+    { label: "Registrar nuevo pago", onClick: () => abrirModal("modalPago"), accent: "#10b981" },
+    { label: "Ver ranking de productos", onClick: () => abrirModal("modalRankingProductos"), accent: "#6366f1" },
+    { label: "Edición masiva de productos", onClick: () => setMostrarEditorMasivo(true), accent: "#3b82f6" },
+  ];
 
   return (
-    <div className="container-fluid mt-4 px-3 mb-4">
-      <h2 className="mb-4 text-center fs-3">Panel de Administración</h2>
+    <div className="container-fluid mt-4 px-3 mb-5">
+      {/* Header */}
+      <div className="mb-4">
+        <h4 style={{ color: "#f1f5f9", fontWeight: 700, marginBottom: 4 }}>
+          Panel de Administración
+        </h4>
+        <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>
+          Control de ventas, pagos, stock y rendimiento por sucursal.
+        </p>
+      </div>
 
-      {/* 🔹 MODAL: Registrar nuevo pago */}
-      <div
-        className="modal fade"
-        id="modalPago"
-        tabIndex="-1"
-        aria-labelledby="modalPagoLabel"
-        aria-hidden="true"
-      >
+      {/* Acciones */}
+      <div className="row g-3 mb-4">
+        {acciones.map(({ label, onClick, accent }) => (
+          <div className="col-12 col-md-4" key={label}>
+            <button
+              className="w-100"
+              onClick={onClick}
+              style={{
+                background: "#111827",
+                border: `1px solid ${accent}40`,
+                borderRadius: 9,
+                color: accent,
+                fontWeight: 600,
+                fontSize: "0.88rem",
+                padding: "11px 0",
+                cursor: "pointer",
+                transition: "background 0.15s, border-color 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `${accent}12`;
+                e.currentTarget.style.borderColor = accent;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#111827";
+                e.currentTarget.style.borderColor = `${accent}40`;
+              }}
+            >
+              {label}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Ventas + Resumen financiero */}
+      <div className="row g-4 mb-4">
+        <div className="col-12 col-lg-6">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Ventas mensuales</p>
+            <VentasMensuales />
+          </div>
+        </div>
+        <div className="col-12 col-lg-6">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Resumen financiero por sucursal</p>
+            <ResumenFinancieroSucursal recargar={recargarResumen} />
+          </div>
+        </div>
+      </div>
+
+      {/* Stock */}
+      <div className="row">
+        <div className="col-12">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Valor de stock por sucursal</p>
+            <TablaValorStockSucursal />
+          </div>
+        </div>
+      </div>
+
+      {/* Modal: Registrar nuevo pago */}
+      <div className="modal fade" id="modalPago" tabIndex="-1" aria-labelledby="modalPagoLabel" aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title" id="modalPagoLabel">
-                ➕ Registrar nuevo pago
+          <div className="modal-content" style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 14 }}>
+            <div className="modal-header" style={{ borderBottom: "1px solid #1e293b" }}>
+              <h5 className="modal-title" id="modalPagoLabel" style={{ color: "#f1f5f9", fontWeight: 600 }}>
+                Registrar nuevo pago
               </h5>
-              <button
-                type="button"
-                className="btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Cerrar"
-              ></button>
+              <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar" />
             </div>
             <div className="modal-body">
               <FormularioPagoSucursal onPagoExitoso={manejarPagoExitoso} />
@@ -64,59 +129,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* 🔘 Botones superiores */}
-      <div className="row mt-4 mb-4 justify-content-center">
-        <div className="col-12 col-md-6 text-center mb-3">
-          <button
-            className="btn btn-outline-secondary w-100"
-            onClick={abrirModalPago}
-          >
-            ➕ Registrar nuevo pago
-          </button>
-        </div>
-
-        <div className="col-12 col-md-6 text-center mb-3">
-          <button
-            className="btn btn-outline-secondary w-100"
-            onClick={abrirModalRanking}
-          >
-            📈 Ver ranking de productos
-          </button>
-        </div>
-      </div>
-
-      {/* 🔹 Ventas mensuales + resumen financiero */}
-      <div className="row g-4">
-        <div className="col-12 col-lg-6">
-          <div className="card p-3 h-100">
-            <h5 className="text-center mb-3">🗓️ Ventas Mensuales</h5>
-            <VentasMensuales />
-          </div>
-        </div>
-
-        <div className="col-12 col-lg-6">
-          <div className="card p-3 h-100">
-            <h5 className="text-center mb-3">📦 Stock y Resumen Financiero</h5>
-            <TablaValorStockSucursal />
-            <ResumenFinancieroSucursal recargar={recargarResumen} />
-          </div>
-        </div>
-      </div>
-
-      {/* 🔧 Edición masiva */}
-      <button
-        className="btn btn-outline-info mb-3 mt-4 w-100"
-        onClick={() => setMostrarEditorMasivo(true)}
-      >
-        Edición Masiva
-      </button>
-
-      <ProductoEditorMasivo
-        show={mostrarEditorMasivo}
-        onClose={() => setMostrarEditorMasivo(false)}
-      />
-
-      {/* ✅ Ranking de productos (modal renderizado una sola vez) */}
+      <ProductoEditorMasivo show={mostrarEditorMasivo} onClose={() => setMostrarEditorMasivo(false)} />
       <RankingProductosModal />
     </div>
   );

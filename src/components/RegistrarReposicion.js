@@ -1,98 +1,285 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
+
+const iStyle = {
+  background: "#0d1526",
+  border: "1px solid #1e293b",
+  color: "#e2e8f0",
+  borderRadius: "8px",
+};
+
+const lStyle = {
+  color: "#94a3b8",
+  fontSize: "0.82rem",
+  marginBottom: "4px",
+};
 
 function RegistrarReposicion() {
   const [productos, setProductos] = useState([]);
   const [sucursales, setSucursales] = useState([]);
+
   const [codigoBarra, setCodigoBarra] = useState("");
+  const [productoDetectado, setProductoDetectado] = useState(null);
+
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+
+  const [mostrarSinStock, setMostrarSinStock] = useState(true);
+
+  const [loadingSucursales, setLoadingSucursales] = useState(false);
+  const [loadingProductos, setLoadingProductos] = useState(false);
+  const [loadingScan, setLoadingScan] = useState(false);
+  const [loadingSubmit, setLoadingSubmit] = useState(false);
+
+  const lastScanRequestId = useRef(0);
+  const autocompleteRef = useRef(null);
+  const inputBuscarRef = useRef(null);
+
   const [form, setForm] = useState({
     gusto_id: "",
     sucursal_id: "",
     cantidad: "",
   });
 
+  const normalizar = (str = "") =>
+    str
+      .toString()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  const labelItem = (p) => `${p.producto_nombre} - ${p.gusto}`;
+
   useEffect(() => {
-    axios.get("/").then((res) => setProductos(res.data));
-    axios.get("/sucursales").then((res) => setSucursales(res.data));
+    const fetchAll = async () => {
+      try {
+        setLoadingProductos(true);
+        setLoadingSucursales(true);
+        const [prodRes, sucRes] = await Promise.all([
+          axios.get("/"),
+          axios.get("/sucursales"),
+        ]);
+        setProductos(prodRes.data || []);
+        setSucursales(sucRes.data || []);
+      } catch {
+        toast.error("Error al cargar datos iniciales");
+      } finally {
+        setLoadingProductos(false);
+        setLoadingSucursales(false);
+      }
+    };
+    fetchAll();
   }, []);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "sucursal_id") {
+      setForm((prev) => ({ ...prev, sucursal_id: value, gusto_id: "", cantidad: "" }));
+      setCodigoBarra("");
+      setProductoDetectado(null);
+      setQuery("");
+      setIsOpen(false);
+      setHighlightIndex(-1);
+      setMostrarSinStock(true);
+      return;
+    }
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const productosFiltrados = useMemo(() => {
+    if (!form.sucursal_id) return [];
+    return productos
+      .filter((p) => String(p.sucursal_id) === String(form.sucursal_id))
+      .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0));
+  }, [productos, form.sucursal_id]);
 
-    axios
-      .post("/reposicion", form)
-      .then(() => {
-        toast.success("✅ Reposición registrada correctamente");
-        setForm({ gusto_id: "", sucursal_id: "", cantidad: "" });
-        setCodigoBarra("");
-      })
-      .catch(() => toast.error("❌ Error al registrar la reposición"));
-  };
+  const seleccionado = useMemo(() => {
+    return productosFiltrados.find((p) => String(p.gusto_id) === String(form.gusto_id)) || null;
+  }, [productosFiltrados, form.gusto_id]);
 
-  const handleBarcode = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (!codigoBarra || !form.sucursal_id) {
-        toast.error("Falta el código de barras o la sucursal");
-        return;
+  const resultados = useMemo(() => {
+    const q = normalizar(query);
+    let list = productosFiltrados;
+    if (!mostrarSinStock) {
+      list = list.filter((p) => Number(p.stock) > 0);
+    }
+    if (q) {
+      list = list.filter((p) => {
+        const prod = normalizar(p.producto_nombre);
+        const gus = normalizar(p.gusto);
+        return prod.includes(q) || gus.includes(q);
+      });
+    }
+    return list.slice(0, 12);
+  }, [productosFiltrados, query, mostrarSinStock]);
+
+  useEffect(() => {
+    const onMouseDown = (e) => {
+      if (!autocompleteRef.current) return;
+      if (!autocompleteRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setHighlightIndex(-1);
       }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, []);
 
-      axios
-        .get(
-          `/buscar-por-codigo/${codigoBarra}?sucursal_id=${form.sucursal_id}`
-        )
-        .then((res) => {
-          const gusto = res.data;
-          setForm((prev) => ({
-            ...prev,
-            gusto_id: gusto.gusto_id,
-          }));
-          toast.success(
-            `✅ Detectado: ${gusto.producto_nombre} - ${gusto.gusto}`
-          );
-        })
-        .catch(() => {
-          toast.error("❌ Código no encontrado");
-          setForm((prev) => ({ ...prev, gusto_id: "" }));
-        });
+  const seleccionarItem = (p) => {
+    if (!p) return;
+    setForm((prev) => ({ ...prev, gusto_id: String(p.gusto_id) }));
+    setQuery(labelItem(p));
+    setIsOpen(false);
+    setHighlightIndex(-1);
+  };
+
+  const onKeyDownBuscar = (e) => {
+    if (!isOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setIsOpen(true);
+      return;
+    }
+    if (e.key === "Escape") {
+      setIsOpen(false);
+      setHighlightIndex(-1);
+      return;
+    }
+    if (!resultados.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setIsOpen(true);
+      setHighlightIndex((prev) => {
+        const next = prev + 1;
+        return next >= resultados.length ? 0 : next;
+      });
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setIsOpen(true);
+      setHighlightIndex((prev) => {
+        const next = prev - 1;
+        return next < 0 ? resultados.length - 1 : next;
+      });
+    }
+    if (e.key === "Enter" && isOpen) {
+      e.preventDefault();
+      const p = resultados[highlightIndex] || resultados[0];
+      seleccionarItem(p);
     }
   };
 
-  const productosFiltrados = form.sucursal_id
-    ? productos.filter(
-        (p) => String(p.sucursal_id) === String(form.sucursal_id)
-      )
-    : [];
+  useEffect(() => {
+    if (!codigoBarra || !form.sucursal_id) {
+      setProductoDetectado(null);
+      return;
+    }
+    const trimmed = codigoBarra.trim();
+    if (!trimmed) {
+      setProductoDetectado(null);
+      return;
+    }
+    const requestId = ++lastScanRequestId.current;
+    const delay = setTimeout(async () => {
+      try {
+        setLoadingScan(true);
+        const res = await axios.get(
+          `/buscar-por-codigo/${encodeURIComponent(trimmed)}?sucursal_id=${form.sucursal_id}`
+        );
+        if (requestId !== lastScanRequestId.current) return;
+        const gusto = res.data;
+        setForm((prev) => ({ ...prev, gusto_id: String(gusto.gusto_id) }));
+        setProductoDetectado(`${gusto.producto_nombre} - ${gusto.gusto}`);
+        setQuery(`${gusto.producto_nombre} - ${gusto.gusto}`);
+        setIsOpen(false);
+        setHighlightIndex(-1);
+      } catch {
+        setForm((prev) => ({ ...prev, gusto_id: "" }));
+        setProductoDetectado(null);
+        if (trimmed.length >= 6) toast.error("Código no encontrado");
+      } finally {
+        if (requestId === lastScanRequestId.current) setLoadingScan(false);
+      }
+    }, 250);
+    return () => clearTimeout(delay);
+  }, [codigoBarra, form.sucursal_id]);
 
-  const gustoDetectado = productos.find(
-    (p) =>
-      p.gusto_id === form.gusto_id &&
-      p.sucursal_id === parseInt(form.sucursal_id)
-  );
-
-  const listaParaSelect = gustoDetectado
-    ? [...new Set([gustoDetectado, ...productosFiltrados])]
-    : productosFiltrados;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.gusto_id || !form.sucursal_id) {
+      toast.error("Seleccioná sucursal y producto");
+      return;
+    }
+    const cant = Number(form.cantidad);
+    if (!cant || cant < 1) {
+      toast.error("Cantidad inválida");
+      return;
+    }
+    try {
+      setLoadingSubmit(true);
+      await axios.post("/reposicion", {
+        gusto_id: Number(form.gusto_id),
+        sucursal_id: Number(form.sucursal_id),
+        cantidad: cant,
+      });
+      toast.success("Reposición registrada correctamente");
+      setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "" }));
+      setCodigoBarra("");
+      setProductoDetectado(null);
+      setQuery("");
+      setIsOpen(false);
+      setHighlightIndex(-1);
+      try {
+        const prodRes = await axios.get("/");
+        setProductos(prodRes.data || []);
+      } catch {}
+      inputBuscarRef.current?.focus();
+    } catch {
+      toast.error("Error al registrar la reposición");
+    } finally {
+      setLoadingSubmit(false);
+    }
+  };
 
   return (
-    <div className="container mt-5">
-      <h2>Registrar Reposición</h2>
-      <form onSubmit={handleSubmit} className="card p-4 mt-3">
+    <div
+      className="container mt-5"
+      style={{ maxWidth: 560 }}
+    >
+      <div className="mb-4">
+        <h4 style={{ color: "#f1f5f9", fontWeight: 700, marginBottom: 2 }}>
+          Registrar Reposición
+        </h4>
+        <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>
+          Cargá stock a una sucursal — incluye productos sin stock
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          background: "#111827",
+          border: "1px solid #1e293b",
+          borderRadius: 14,
+          padding: "28px 28px 24px",
+        }}
+      >
+        {/* Sucursal */}
         <div className="mb-3">
-          <label className="form-label">🏬 Sucursal</label>
+          <label style={lStyle}>Sucursal</label>
           <select
             className="form-select"
             name="sucursal_id"
             value={form.sucursal_id}
             onChange={handleChange}
             required
+            disabled={loadingSucursales || loadingSubmit}
+            style={iStyle}
           >
-            <option value="">Seleccionar sucursal</option>
+            <option value="">
+              {loadingSucursales ? "Cargando sucursales..." : "Seleccionar sucursal"}
+            </option>
             {sucursales.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nombre}
@@ -101,53 +288,203 @@ function RegistrarReposicion() {
           </select>
         </div>
 
+        {/* Código de barras */}
         <div className="mb-3">
-          <label className="form-label">
-            📷 Escanear código de barras (opcional)
-          </label>
+          <label style={lStyle}>Escanear código de barras (opcional)</label>
+          <div className="input-group">
+            <input
+              type="text"
+              className="form-control input-dark"
+              value={codigoBarra}
+              onChange={(e) => setCodigoBarra(e.target.value)}
+              placeholder="Escaneá el código..."
+              disabled={!form.sucursal_id || loadingSubmit}
+              autoFocus
+              style={{ ...iStyle, borderRight: "none" }}
+            />
+            <span
+              className="input-group-text"
+              style={{
+                background: "#1e293b",
+                border: "1px solid #1e293b",
+                borderLeft: "none",
+                color: "#94a3b8",
+                fontSize: "0.8rem",
+              }}
+            >
+              {loadingScan ? "..." : "OK"}
+            </span>
+          </div>
+          {productoDetectado && (
+            <div
+              style={{
+                background: "rgba(16,185,129,0.1)",
+                border: "1px solid rgba(16,185,129,0.3)",
+                borderRadius: 8,
+                padding: "8px 12px",
+                marginTop: 8,
+                color: "#6ee7a0",
+                fontSize: "0.85rem",
+              }}
+            >
+              Detectado: <strong>{productoDetectado}</strong>
+            </div>
+          )}
+        </div>
+
+        {/* Autocomplete */}
+        <div className="mb-3" ref={autocompleteRef} style={{ position: "relative" }}>
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <label style={{ ...lStyle, marginBottom: 0 }}>Buscar producto o gusto</label>
+            <div className="form-check mb-0">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="mostrarSinStockRepo"
+                checked={mostrarSinStock}
+                onChange={(e) => setMostrarSinStock(e.target.checked)}
+                disabled={!form.sucursal_id || loadingSubmit}
+                style={{ cursor: "pointer" }}
+              />
+              <label
+                className="form-check-label"
+                htmlFor="mostrarSinStockRepo"
+                style={{ color: "#64748b", fontSize: "0.78rem", cursor: "pointer" }}
+              >
+                Mostrar sin stock
+              </label>
+            </div>
+          </div>
+
           <input
+            ref={inputBuscarRef}
             type="text"
-            className="form-control"
-            value={codigoBarra}
-            onChange={(e) => setCodigoBarra(e.target.value)}
-            onKeyDown={handleBarcode}
-            placeholder="Escaneá el código y presioná Enter"
-            disabled={!form.sucursal_id}
-            autoFocus
+            className="form-control input-dark"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIsOpen(true);
+              setHighlightIndex(-1);
+              setForm((prev) => ({ ...prev, gusto_id: "" }));
+            }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={onKeyDownBuscar}
+            placeholder="Ej: Ignite, mango, ice, uva..."
+            disabled={!form.sucursal_id || loadingSubmit || loadingProductos}
+            style={iStyle}
           />
+
+          {isOpen && form.sucursal_id && (
+            <div
+              className="position-absolute w-100"
+              style={{
+                zIndex: 1000,
+                maxHeight: 260,
+                overflowY: "auto",
+                left: 0,
+                right: 0,
+                top: "calc(100% + 4px)",
+                background: "#0d1526",
+                border: "1px solid #1e293b",
+                borderRadius: 8,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              }}
+            >
+              {loadingProductos ? (
+                <div style={{ padding: "10px 14px", color: "#64748b", fontSize: "0.85rem" }}>
+                  Cargando productos...
+                </div>
+              ) : resultados.length === 0 ? (
+                <div style={{ padding: "10px 14px", color: "#64748b", fontSize: "0.85rem" }}>
+                  Sin resultados
+                </div>
+              ) : (
+                resultados.map((p, idx) => {
+                  const sinStock = Number(p.stock) <= 0;
+                  const active = idx === highlightIndex;
+
+                  return (
+                    <button
+                      key={`${p.gusto_id}-${p.sucursal_id}-${idx}`}
+                      type="button"
+                      className="d-flex justify-content-between align-items-center w-100"
+                      onMouseEnter={() => setHighlightIndex(idx)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => seleccionarItem(p)}
+                      style={{
+                        background: active ? "#1e293b" : "transparent",
+                        border: "none",
+                        borderBottom: "1px solid #1e293b",
+                        padding: "9px 14px",
+                        color: sinStock ? "#f87171" : "#e2e8f0",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        width: "100%",
+                      }}
+                    >
+                      <span>
+                        {p.producto_nombre} - {p.gusto}
+                        {sinStock && (
+                          <span
+                            style={{
+                              marginLeft: 6,
+                              fontSize: "0.75rem",
+                              color: "#f87171",
+                              opacity: 0.8,
+                            }}
+                          >
+                            (sin stock)
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        style={{
+                          background: sinStock ? "rgba(248,113,113,0.15)" : active ? "#334155" : "#1e293b",
+                          color: sinStock ? "#f87171" : "#94a3b8",
+                          borderRadius: 5,
+                          padding: "1px 8px",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          minWidth: 28,
+                          textAlign: "center",
+                        }}
+                      >
+                        {p.stock}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {seleccionado && (
+            <div
+              style={{
+                background: "rgba(99,102,241,0.1)",
+                border: "1px solid rgba(99,102,241,0.25)",
+                borderRadius: 8,
+                padding: "8px 12px",
+                marginTop: 8,
+                color: "#a5b4fc",
+                fontSize: "0.85rem",
+              }}
+            >
+              Seleccionado: <strong>{labelItem(seleccionado)}</strong>
+              <span style={{ color: "#64748b", marginLeft: 8 }}>
+                — Stock actual:{" "}
+                <strong style={{ color: Number(seleccionado.stock) <= 0 ? "#f87171" : "#6ee7a0" }}>
+                  {seleccionado.stock}
+                </strong>
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="mb-3">
-          <label className="form-label">🍭 Gusto</label>
-          <select
-            className="form-select"
-            name="gusto_id"
-            value={form.gusto_id}
-            onChange={handleChange}
-            required
-            disabled={!form.sucursal_id}
-          >
-            <option value="">
-              {form.sucursal_id
-                ? "Seleccionar gusto"
-                : "Elegí una sucursal primero"}
-            </option>
-            {[...listaParaSelect]
-              .sort((a, b) => b.stock - a.stock)
-              .map((p, index) => (
-                <option
-                  key={`${p.gusto_id}-${p.sucursal_id || index}`}
-                  value={p.gusto_id}
-                >
-                  {p.producto_nombre} - {p.gusto} ({p.sucursal}) — {p.stock} en
-                  stock
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <div className="mb-3">
-          <label className="form-label">➕ Cantidad a reponer</label>
+        {/* Cantidad */}
+        <div className="mb-4">
+          <label style={lStyle}>Cantidad a reponer</label>
           <input
             type="number"
             className="form-control"
@@ -156,16 +493,31 @@ function RegistrarReposicion() {
             onChange={handleChange}
             required
             min="1"
-            disabled={!form.gusto_id}
+            disabled={!form.gusto_id || loadingSubmit}
+            style={iStyle}
           />
         </div>
 
         <button
           type="submit"
-          className="btn btn-dark  w-100"
-          disabled={!form.gusto_id || !form.cantidad}
+          className="w-100"
+          disabled={!form.gusto_id || !form.cantidad || loadingSubmit}
+          style={{
+            background:
+              !form.gusto_id || !form.cantidad || loadingSubmit
+                ? "#1e293b"
+                : "linear-gradient(135deg, #10b981, #059669)",
+            border: "none",
+            borderRadius: 9,
+            color: !form.gusto_id || !form.cantidad || loadingSubmit ? "#475569" : "#fff",
+            fontWeight: 600,
+            fontSize: "0.95rem",
+            padding: "11px 0",
+            cursor: !form.gusto_id || !form.cantidad || loadingSubmit ? "not-allowed" : "pointer",
+            transition: "opacity 0.2s",
+          }}
         >
-          Registrar manualmente
+          {loadingSubmit ? "Registrando..." : "Registrar reposición"}
         </button>
       </form>
     </div>

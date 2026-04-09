@@ -2,6 +2,23 @@ import React, { useEffect, useState } from "react";
 import axios from "../utils/axiosInstance";
 import { getUsuario } from "../utils/auth";
 
+const thStyle = {
+  color: "#64748b",
+  fontWeight: 600,
+  padding: "8px 12px",
+  fontSize: "0.78rem",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  borderBottom: "1px solid #1e293b",
+};
+
+const tdStyle = {
+  color: "#e2e8f0",
+  padding: "9px 12px",
+  fontSize: "0.88rem",
+  borderBottom: "1px solid #1e293b",
+};
+
 function ResumenFinancieroSucursal({ recargar }) {
   const usuario = getUsuario();
   const esAdmin = usuario?.rol === "admin";
@@ -12,125 +29,146 @@ function ResumenFinancieroSucursal({ recargar }) {
 
   useEffect(() => {
     setCargando(true);
-
-    // Si más adelante querés filtros de fecha, podés pasar params { desde, hasta }
     axios
       .get("/deuda-por-sucursal")
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : [];
-
         if (esAdmin) {
           setResumen(data);
         } else {
-          // El endpoint ya filtra por la sucursal del token, pero por seguridad:
           const sucursalData =
-            data.find(
-              (s) => Number(s.sucursal_id) === Number(usuario?.sucursalId)
-            ) ||
+            data.find((s) => Number(s.sucursal_id) === Number(usuario?.sucursalId)) ||
             data[0] ||
             null;
           setResumen(sucursalData ? [sucursalData] : []);
           setSucursalNombre(sucursalData?.sucursal || "Desconocida");
         }
       })
-      .catch((err) => {
-        console.error("❌ Error al obtener resumen financiero:", err);
-        setResumen([]);
-      })
+      .catch(() => setResumen([]))
       .finally(() => setCargando(false));
   }, [recargar, esAdmin, usuario?.sucursalId]);
 
-  const totalFacturado = resumen.reduce(
-    (acc, s) => acc + Number(s.facturado || 0),
-    0
-  );
-  const totalPagado = resumen.reduce(
-    (acc, s) => acc + Number(s.pagado || 0),
-    0
-  );
+  const totalFacturado = resumen.reduce((acc, s) => acc + Number(s.facturado || 0), 0);
+  const totalPagado = resumen.reduce((acc, s) => acc + Number(s.pagado || 0), 0);
   const totalPendiente = totalFacturado - totalPagado;
 
+  if (cargando) {
+    return <p style={{ color: "#64748b", fontSize: "0.85rem" }}>Cargando resumen...</p>;
+  }
+
+  if (resumen.length === 0) {
+    return <p style={{ color: "#64748b", fontSize: "0.85rem" }}>No hay datos para mostrar.</p>;
+  }
+
   return (
-    <div className="p-4 mt-4">
-      <h4 className="mb-3 text-center">
-        {esAdmin
-          ? "💰 Resumen financiero por sucursal"
-          : `💰 Tu resumen financiero (${sucursalNombre})`}
-      </h4>
+    <div>
+      {!esAdmin && sucursalNombre && (
+        <p style={{ color: "#64748b", fontSize: "0.82rem", marginBottom: 12 }}>
+          Sucursal:{" "}
+          <span style={{ color: "#94a3b8", fontWeight: 600 }}>{sucursalNombre}</span>
+        </p>
+      )}
 
-      {cargando ? (
-        <div className="alert alert-info text-center">Cargando resumen...</div>
-      ) : resumen.length === 0 ? (
-        <div className="alert alert-warning text-center">
-          No hay datos para mostrar.
-        </div>
-      ) : (
-        <div className="table-responsive">
-          <table className="table table-bordered table-striped table-sm text-center align-middle">
-            <thead className="table-dark">
-              <tr>
-                <th>Sucursal</th>
-                <th>Facturado</th>
-                <th>Pagado</th>
-                <th>Deuda</th>
-                <th>% Pagado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resumen.map((s, i) => {
-                const facturado = Number(s.facturado || 0);
-                const pagado = Number(s.pagado || 0);
-                const deuda = Number(s.deuda ?? facturado - pagado);
-                const porcentaje =
-                  facturado > 0 ? (pagado / facturado) * 100 : 0;
+      <div className="table-responsive">
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>Sucursal</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Facturado</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Pagado</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Deuda</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>% Pagado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resumen.map((s, i) => {
+              const facturado = Number(s.facturado || 0);
+              const pagado = Number(s.pagado || 0);
+              const deuda = Number(s.deuda ?? facturado - pagado);
+              const porcentaje = facturado > 0 ? (pagado / facturado) * 100 : 0;
 
-                return (
-                  <tr key={i}>
-                    <td>{s.sucursal}</td>
-                    <td>${facturado.toFixed(2)}</td>
-                    <td>${pagado.toFixed(2)}</td>
-                    <td
-                      className={
-                        deuda <= 0
-                          ? "bg-success text-white fw-bold"
-                          : "bg-danger text-white fw-bold"
-                      }
-                    >
-                      ${deuda.toFixed(2)} {deuda <= 0 && "✅"}
-                    </td>
-                    <td
-                      className={
+              return (
+                <tr key={i}>
+                  <td style={tdStyle}>{s.sucursal}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "#94a3b8" }}>
+                    ${facturado.toFixed(2)}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "#6ee7a0" }}>
+                    ${pagado.toFixed(2)}
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      textAlign: "right",
+                      color: deuda <= 0 ? "#6ee7a0" : "#f87171",
+                      fontWeight: 600,
+                    }}
+                  >
+                    ${deuda.toFixed(2)}
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      textAlign: "right",
+                      fontWeight: 600,
+                      color:
                         porcentaje === 100
-                          ? "text-success fw-bold"
+                          ? "#6ee7a0"
                           : porcentaje >= 50
-                          ? "text-warning fw-bold"
-                          : "text-danger fw-bold"
-                      }
-                    >
-                      {porcentaje.toFixed(1)}%
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            {esAdmin && (
-              <tfoot className="fw-bold">
-                <tr>
-                  <td>Total general</td>
-                  <td>${totalFacturado.toFixed(2)}</td>
-                  <td>${totalPagado.toFixed(2)}</td>
-                  <td>${totalPendiente.toFixed(2)}</td>
-                  <td>
-                    {totalFacturado > 0
-                      ? `${((totalPagado / totalFacturado) * 100).toFixed(1)}%`
-                      : "0%"}
+                          ? "#fbbf24"
+                          : "#f87171",
+                    }}
+                  >
+                    {porcentaje.toFixed(1)}%
                   </td>
                 </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
+              );
+            })}
+          </tbody>
+          {esAdmin && (
+            <tfoot>
+              <tr style={{ borderTop: "2px solid #334155" }}>
+                <td style={{ ...tdStyle, color: "#94a3b8", fontWeight: 700, borderBottom: "none" }}>
+                  Total general
+                </td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#94a3b8", fontWeight: 700, borderBottom: "none" }}>
+                  ${totalFacturado.toFixed(2)}
+                </td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#6ee7a0", fontWeight: 700, borderBottom: "none" }}>
+                  ${totalPagado.toFixed(2)}
+                </td>
+                <td
+                  style={{
+                    ...tdStyle,
+                    textAlign: "right",
+                    fontWeight: 700,
+                    borderBottom: "none",
+                    color: totalPendiente <= 0 ? "#6ee7a0" : "#f87171",
+                  }}
+                >
+                  ${totalPendiente.toFixed(2)}
+                </td>
+                <td
+                  style={{
+                    ...tdStyle,
+                    textAlign: "right",
+                    fontWeight: 700,
+                    borderBottom: "none",
+                    color:
+                      totalFacturado > 0 && (totalPagado / totalFacturado) * 100 === 100
+                        ? "#6ee7a0"
+                        : "#fbbf24",
+                  }}
+                >
+                  {totalFacturado > 0
+                    ? `${((totalPagado / totalFacturado) * 100).toFixed(1)}%`
+                    : "0%"}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
     </div>
   );
 }

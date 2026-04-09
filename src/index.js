@@ -15,7 +15,22 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
     <App />
-    <ToastContainer position="top-right" autoClose={3000} />
+    <ToastContainer
+      position="bottom-right"
+      autoClose={3000}
+      hideProgressBar={false}
+      closeOnClick
+      pauseOnHover
+      theme="dark"
+      toastStyle={{
+        background: "#111827",
+        border: "1px solid #1e293b",
+        borderRadius: "10px",
+        color: "#f1f5f9",
+        fontSize: "0.9rem",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+      }}
+    />
   </React.StrictMode>
 );
 

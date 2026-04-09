@@ -40,17 +40,18 @@ function FormularioPagoSucursal({ onPagoExitoso }) {
   return (
     <form onSubmit={handleSubmit}>
       <div className="mb-3">
-        <label className="form-label">🏬 Sucursal</label>
+        <label className="form-label" style={labelStyle}>🏬 Sucursal</label>
         <select
           className="form-select"
+          style={selectStyle}
           name="sucursal_id"
           value={form.sucursal_id}
           onChange={handleChange}
           required
         >
-          <option value="">Seleccionar</option>
+          <option value="" style={optStyle}>Seleccionar</option>
           {sucursales.map((s) => (
-            <option key={s.id} value={s.id}>
+            <option key={s.id} value={s.id} style={optStyle}>
               {s.nombre}
             </option>
           ))}
@@ -58,37 +59,66 @@ function FormularioPagoSucursal({ onPagoExitoso }) {
       </div>
 
       <div className="mb-3">
-        <label className="form-label">💰 Monto</label>
+        <label className="form-label" style={labelStyle}>💰 Monto</label>
         <input
           type="number"
           className="form-control"
+          style={inputStyle}
           name="monto"
           value={form.monto}
           onChange={handleChange}
           required
           min="0"
+          placeholder="Ej: 50000"
         />
       </div>
 
       <div className="mb-3">
-        <label className="form-label">🧾 Método de pago</label>
+        <label className="form-label" style={labelStyle}>🧾 Método de pago</label>
         <input
           type="text"
           className="form-control"
+          style={inputStyle}
           name="metodo"
           value={form.metodo}
           onChange={handleChange}
           required
+          placeholder="Ej: Transferencia, Efectivo..."
         />
       </div>
 
-      <div className="modal-footer">
-        <button type="submit" className="btn btn-success w-100">
+      <div className="modal-footer" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 16 }}>
+        <button type="submit" className="btn btn-success w-100" style={{ fontWeight: 600 }}>
           Registrar Pago
         </button>
       </div>
     </form>
   );
 }
+
+const labelStyle = {
+  color: "#e2e8f0",
+  fontWeight: 500,
+  marginBottom: 6,
+};
+
+const inputStyle = {
+  background: "#1e2530",
+  border: "1px solid rgba(255,255,255,0.15)",
+  color: "#fff",
+  borderRadius: 8,
+};
+
+const selectStyle = {
+  background: "#1e2530",
+  border: "1px solid rgba(255,255,255,0.15)",
+  color: "#fff",
+  borderRadius: 8,
+};
+
+const optStyle = {
+  background: "#1e2530",
+  color: "#fff",
+};
 
 export default FormularioPagoSucursal;

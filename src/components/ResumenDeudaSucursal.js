@@ -34,65 +34,57 @@ function ResumenDeudasSucursal() {
   const deuda = facturado - pagado;
   const porcentaje = facturado > 0 ? (pagado / facturado) * 100 : 0;
 
+  const fmt = (n) =>
+    n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const cardBase = {
+    background: "#111827",
+    borderRadius: "10px",
+    borderTop: "3px solid",
+  };
+
   return (
-    <div className="card p-3 p-md-4 mt-3 shadow-sm">
-      <h5 className="mb-3 text-center">Estado de Deuda</h5>
-      <div className="table-responsive">
-        <table className="table table-bordered table-striped text-center align-middle">
-          <thead className="table-dark">
-            <tr>
-              <th>Sucursal</th>
-              <th>Facturado</th>
-              <th>Pagado</th>
-              <th>Deuda</th>
-              <th>% Pagado</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{resumen.sucursal}</td>
-              <td>
-                $
-                {facturado.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </td>
-              <td>
-                $
-                {pagado.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </td>
-              <td
-                className={
-                  deuda <= 0
-                    ? "bg-success text-white fw-bold"
-                    : "bg-danger text-white fw-bold"
-                }
-              >
-                $
-                {deuda.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-                {deuda <= 0 && " ✅"}
-              </td>
-              <td
-                className={
-                  porcentaje === 100
-                    ? "text-success fw-bold"
-                    : porcentaje >= 50
-                    ? "text-warning fw-bold"
-                    : "text-danger fw-bold"
-                }
-              >
+    <div className="mt-2 mb-4">
+      <p className="text-white-50 text-center small mb-3 text-uppercase" style={{ letterSpacing: "1px" }}>
+        Estado de Deuda — {resumen.sucursal}
+      </p>
+      <div className="row g-3">
+        <div className="col-6 col-md-3">
+          <div className="card text-center shadow h-100 border-0" style={{ ...cardBase, borderTopColor: "#6c757d" }}>
+            <div className="card-body py-3">
+              <div className="text-white-50 small mb-2 text-uppercase" style={{ letterSpacing: "0.5px", fontSize: "0.7rem" }}>Facturado</div>
+              <div className="fw-bold text-white" style={{ fontSize: "1.15rem" }}>${fmt(facturado)}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card text-center shadow h-100 border-0" style={{ ...cardBase, borderTopColor: "#198754" }}>
+            <div className="card-body py-3">
+              <div className="text-white-50 small mb-2 text-uppercase" style={{ letterSpacing: "0.5px", fontSize: "0.7rem" }}>Pagado</div>
+              <div className="fw-bold text-success" style={{ fontSize: "1.15rem" }}>${fmt(pagado)}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card text-center shadow h-100 border-0" style={{ ...cardBase, borderTopColor: deuda <= 0 ? "#198754" : "#dc3545", background: deuda <= 0 ? "#0f3d24" : "#3d0f0f" }}>
+            <div className="card-body py-3">
+              <div className="text-white-50 small mb-2 text-uppercase" style={{ letterSpacing: "0.5px", fontSize: "0.7rem" }}>Deuda</div>
+              <div className="fw-bold text-white" style={{ fontSize: "1.15rem" }}>
+                ${fmt(deuda)} {deuda <= 0 && "✅"}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card text-center shadow h-100 border-0" style={{ ...cardBase, borderTopColor: porcentaje === 100 ? "#198754" : porcentaje >= 50 ? "#ffc107" : "#dc3545" }}>
+            <div className="card-body py-3">
+              <div className="text-white-50 small mb-2 text-uppercase" style={{ letterSpacing: "0.5px", fontSize: "0.7rem" }}>% Pagado</div>
+              <div className="fw-bold" style={{ fontSize: "1.15rem", color: porcentaje === 100 ? "#198754" : porcentaje >= 50 ? "#ffc107" : "#dc3545" }}>
                 {porcentaje.toFixed(1)}%
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

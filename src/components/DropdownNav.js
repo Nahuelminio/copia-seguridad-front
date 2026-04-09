@@ -32,7 +32,7 @@ function DropdownNav({ id, label, icon, routes }) {
     <li className="nav-item dropdown" ref={dropdownRef}>
       <div className="dropdown">
         <button
-          className={`btn btn-link nav-link dropdown-toggle text-white ${
+          className={`btn btn-link nav-link dropdown-toggle ${
             isActive ? "active" : ""
           }`}
           type="button"

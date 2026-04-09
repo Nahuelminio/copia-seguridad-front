@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import DropdownNav from "./DropdownNav";
 import { jwtDecode } from "jwt-decode";
+import logo from "../assets/logoNorth.png";
 
 function Navbar() {
   const location = useLocation();
@@ -10,6 +11,8 @@ function Navbar() {
   const token = localStorage.getItem("token");
   const decoded = token ? jwtDecode(token) : null;
   const rol = decoded?.rol;
+
+  const puedeVerClientes = rol === "admin" || rol === "sucursal";
 
   useEffect(() => {
     console.log("Navbar montado");
@@ -24,15 +27,23 @@ function Navbar() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token"); // Borra solo el token
-    navigate("/"); // Redirige al login
+    localStorage.removeItem("token");
+    navigate("/");
   };
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-dark bg-dark px-3 py-2">
+    <nav className="navbar navbar-expand-lg navbar-dark px-4" style={{
+      background: "rgba(8, 13, 20, 0.92)",
+      backdropFilter: "blur(12px)",
+      borderBottom: "1px solid rgba(255,255,255,0.07)",
+      position: "sticky",
+      top: 0,
+      zIndex: 1000,
+      minHeight: "64px",
+    }}>
       <div className="container-fluid">
-        <Link className="navbar-brand fw-bold" to="/">
-          Control Stock
+        <Link className="navbar-brand" to="/">
+          <img src={logo} alt="North" style={{ height: "52px", width: "auto", filter: "brightness(1.15)" }} />
         </Link>
 
         <button
@@ -48,8 +59,7 @@ function Navbar() {
         </button>
 
         <div className="collapse navbar-collapse" id="navbarContenido">
-          <ul className="navbar-nav ms-auto text-center">
-            {/* Productos y ventas: visible para todos */}
+          <ul className="navbar-nav ms-auto" style={{ gap: "4px" }}>
             <DropdownNav
               id="dropdownStock"
               label="Gestión Stock"
@@ -69,6 +79,12 @@ function Navbar() {
                   label: "Registrar Venta",
                   onClick: cerrarMenu,
                 },
+                ...(rol === "admin"
+                  ? [
+                      { path: "/transferencias", label: "Transferir entre sucursales", onClick: cerrarMenu },
+                      { path: "/sucursales/gestionar", label: "Teléfonos de sucursales", onClick: cerrarMenu },
+                    ]
+                  : []),
                 {
                   path: "/historial-pagos",
                   label: "Historial Pagos",
@@ -79,10 +95,49 @@ function Navbar() {
                   label: "Historial Ventas",
                   onClick: cerrarMenu,
                 },
+                {
+                  path: "/Cuentas-Corrientes",
+                  label: "Cuentas Corrientes",
+                  onClick: cerrarMenu,
+                },
               ]}
             />
 
-            {/* Solo admin ve el resto */}
+            {puedeVerClientes && (
+              <li className="nav-item">
+                <Link
+                  className={`nav-link ${
+                    location.pathname === "/clientes" ? "active" : ""
+                  }`}
+                  to="/clientes"
+                  onClick={cerrarMenu}
+                >
+                  Clientes
+                </Link>
+              </li>
+            )}
+
+            {/* Mayorista: sucursal ve pedidos, admin ve dashboard también */}
+            <DropdownNav
+              id="dropdownMayorista"
+              label="Mayorista"
+              routes={[
+                {
+                  path: "/mayorista",
+                  label: "Pedidos",
+                  onClick: cerrarMenu,
+                },
+                {
+                  path: "/mayorista/nuevo",
+                  label: "Nuevo pedido",
+                  onClick: cerrarMenu,
+                },
+                ...(rol === "admin"
+                  ? [{ path: "/mayorista/dashboard", label: "Dashboard mayorista", onClick: cerrarMenu }]
+                  : []),
+              ]}
+            />
+
             {rol === "admin" && (
               <>
                 <DropdownNav
@@ -112,13 +167,13 @@ function Navbar() {
                   label="Reposiciones"
                   routes={[
                     {
-                      path: "/registrarReposicion",
-                      label: "Cargar Reposición",
+                      path: "/ordenes-reposicion",
+                      label: "Órdenes de reposición",
                       onClick: cerrarMenu,
                     },
                     {
-                      path: "/clientes",
-                      label: "Clientes",
+                      path: "/registrarReposicion",
+                      label: "Cargar Reposición",
                       onClick: cerrarMenu,
                     },
                     {
@@ -158,7 +213,6 @@ function Navbar() {
               </>
             )}
 
-            {/* Botón cerrar sesión */}
             <li className="nav-item">
               <button
                 className="nav-link btn btn-link text-white"

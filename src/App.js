@@ -29,6 +29,14 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import PodsPorSucursalPage from "./pages/PodsPorSucursalPage";
 import AdminLeads from "./pages/AdminLeads";
+import CuentasCorrientes from "./pages/CuentasCorrientes";
+import Clientes from "./pages/Clientes";
+import PedidosMayorista from "./pages/PedidosMayorista";
+import NuevoPedidoMayorista from "./pages/NuevoPedidoMayorista";
+import DashboardMayorista from "./pages/DashboardMayorista";
+import TransferenciasStock from "./pages/TransferenciasStock";
+import GestionSucursales from "./pages/GestionSucursales";
+import OrdenesReposicion from "./pages/OrdenesReposicion";
 
 // Componente wrapper para mostrar el Navbar solo si no está en login
 const AppLayout = ({ children }) => {
@@ -94,6 +102,14 @@ function App() {
             }
           />
           <Route
+            path="/Cuentas-Corrientes"
+            element={
+              <PrivateRoute>
+                <CuentasCorrientes />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/historial-pagos"
             element={
               <PrivateRoute>
@@ -116,7 +132,7 @@ function App() {
             path="/clientes"
             element={
               <PrivateRoute>
-                <AdminLeads />
+                <Clientes/>
               </PrivateRoute>
             }
           />
@@ -124,7 +140,7 @@ function App() {
             path="/crear-sucursal"
             element={
               <PrivateRoute>
-                <CrearSucursal />
+                <Clientes />
               </PrivateRoute>
             }
           />
@@ -166,6 +182,68 @@ function App() {
             element={
               <PrivateRoute>
                 <ReposicionRapida />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Mayorista */}
+          <Route
+            path="/mayorista"
+            element={
+              <PrivateRoute>
+                <PedidosMayorista />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/mayorista/nuevo"
+            element={
+              <PrivateRoute>
+                <NuevoPedidoMayorista />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/mayorista/pedidos/:id/editar"
+            element={
+              <PrivateRoute>
+                <NuevoPedidoMayorista />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/mayorista/dashboard"
+            element={
+              <PrivateRoute>
+                <DashboardMayorista />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Transferencias de stock */}
+          <Route
+            path="/transferencias"
+            element={
+              <PrivateRoute>
+                <TransferenciasStock />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Órdenes de reposición */}
+          <Route
+            path="/ordenes-reposicion"
+            element={
+              <PrivateRoute>
+                <OrdenesReposicion />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sucursales/gestionar"
+            element={
+              <PrivateRoute>
+                <GestionSucursales />
               </PrivateRoute>
             }
           />
