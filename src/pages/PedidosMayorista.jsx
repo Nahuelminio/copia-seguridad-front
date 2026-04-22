@@ -222,19 +222,21 @@ export default function PedidosMayorista() {
             <tbody>
               {pedidos.map((p) => (
                 <tr key={p.id}>
-                  <td className="text-muted small">{p.id}</td>
+                  <td style={{ color: "#94a3b8", fontSize: "0.85rem" }}>#{p.id}</td>
                   <td>
                     <div className="fw-semibold">{p.cliente_nombre}</div>
                     {p.cliente_telefono && (
-                      <div className="text-muted small">{p.cliente_telefono}</div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{p.cliente_telefono}</div>
                     )}
                   </td>
-                  <td className="small text-muted">{formatFecha(p.fecha_creacion)}</td>
+                  <td style={{ color: "#cbd5e1", fontSize: "0.88rem" }}>{formatFecha(p.fecha_creacion)}</td>
                   <td className="text-end fw-semibold">$ {formatUsd(p.total_usd)}</td>
-                  <td className="text-end small text-muted">
+                  <td className="text-end" style={{ color: "#94a3b8", fontSize: "0.88rem" }}>
                     {p.total_ars > 0
                       ? `$ ${Number(p.total_ars).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
-                      : "—"}
+                      : p.tipo_cambio > 0
+                        ? `$ ${(p.total_usd * p.tipo_cambio).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
+                        : "—"}
                   </td>
                   <td className="text-center">
                     <span className={`badge ${BADGE[p.estado] || "bg-secondary"}`}>

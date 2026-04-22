@@ -60,55 +60,68 @@ function Navbar() {
 
         <div className="collapse navbar-collapse" id="navbarContenido">
           <ul className="navbar-nav ms-auto" style={{ gap: "4px" }}>
+
+            {/* ── Stock: solo inventario ── */}
             <DropdownNav
               id="dropdownStock"
-              label="Gestión Stock"
+              label="Stock"
               routes={[
-                {
-                  path: "/productos",
-                  label: "Productos",
-                  onClick: cerrarMenu,
-                },
-                {
-                  path: "/productosTotal",
-                  label: "Pods Por Sucursal",
-                  onClick: cerrarMenu,
-                },
-                {
-                  path: "/vender",
-                  label: "Registrar Venta",
-                  onClick: cerrarMenu,
-                },
-                ...(rol === "admin"
-                  ? [
-                      { path: "/transferencias", label: "Transferir entre sucursales", onClick: cerrarMenu },
-                      { path: "/sucursales/gestionar", label: "Teléfonos de sucursales", onClick: cerrarMenu },
-                    ]
-                  : []),
-                {
-                  path: "/historial-pagos",
-                  label: "Historial Pagos",
-                  onClick: cerrarMenu,
-                },
-                {
-                  path: "/historial",
-                  label: "Historial Ventas",
-                  onClick: cerrarMenu,
-                },
-                {
-                  path: "/Cuentas-Corrientes",
-                  label: "Cuentas Corrientes",
-                  onClick: cerrarMenu,
-                },
+                { path: "/productos",        label: "Productos",                  onClick: cerrarMenu },
+                { path: "/productosTotal",   label: "Pods por sucursal",          onClick: cerrarMenu },
+                ...(rol === "admin" ? [
+                  { path: "/transferencias",       label: "Transferir entre sucursales", onClick: cerrarMenu },
+                  { path: "/sucursales/gestionar", label: "Teléfonos de sucursales",     onClick: cerrarMenu },
+                ] : []),
               ]}
             />
 
+            {/* ── Ventas: ventas, pagos y cuentas ── */}
+            <DropdownNav
+              id="dropdownVentas"
+              label="Ventas"
+              routes={[
+                { path: "/vender",            label: "Registrar venta",    onClick: cerrarMenu },
+                { path: "/historial",         label: "Historial ventas",   onClick: cerrarMenu },
+                { path: "/historial-pagos",   label: "Historial pagos",    onClick: cerrarMenu },
+                { path: "/Cuentas-Corrientes",label: "Cuentas corrientes", onClick: cerrarMenu },
+                ...(rol === "admin" ? [
+                  { path: "/ventasMensuales", label: "Ventas mensuales", onClick: cerrarMenu },
+                ] : []),
+              ]}
+            />
+
+            {/* ── Reposiciones: solo admin ── */}
+            {rol === "admin" && (
+              <DropdownNav
+                id="dropdownRepo"
+                label="Reposiciones"
+                routes={[
+                  { path: "/ordenes-reposicion",   label: "Órdenes de reposición", onClick: cerrarMenu },
+                  { path: "/registrarReposicion",  label: "Cargar reposición",     onClick: cerrarMenu },
+                  { path: "/historialReposiciones",label: "Historial reposiciones",onClick: cerrarMenu },
+                  { path: "/resumen-ganancias",    label: "Ganancias",             onClick: cerrarMenu },
+                ]}
+              />
+            )}
+
+            {/* ── Mayorista ── */}
+            <DropdownNav
+              id="dropdownMayorista"
+              label="Mayorista"
+              routes={[
+                { path: "/mayorista",           label: "Pedidos",            onClick: cerrarMenu },
+                { path: "/mayorista/nuevo",     label: "Nuevo pedido",       onClick: cerrarMenu },
+                ...(rol === "admin" ? [
+                  { path: "/mayorista/dashboard", label: "Dashboard mayorista", onClick: cerrarMenu },
+                ] : []),
+              ]}
+            />
+
+            {/* ── Clientes (admin + sucursal) ── */}
             {puedeVerClientes && (
               <li className="nav-item">
                 <Link
-                  className={`nav-link ${
-                    location.pathname === "/clientes" ? "active" : ""
-                  }`}
+                  className={`nav-link ${location.pathname === "/clientes" ? "active" : ""}`}
                   to="/clientes"
                   onClick={cerrarMenu}
                 >
@@ -117,110 +130,25 @@ function Navbar() {
               </li>
             )}
 
-            {/* Mayorista: sucursal ve pedidos, admin ve dashboard también */}
-            <DropdownNav
-              id="dropdownMayorista"
-              label="Mayorista"
-              routes={[
-                {
-                  path: "/mayorista",
-                  label: "Pedidos",
-                  onClick: cerrarMenu,
-                },
-                {
-                  path: "/mayorista/nuevo",
-                  label: "Nuevo pedido",
-                  onClick: cerrarMenu,
-                },
-                ...(rol === "admin"
-                  ? [{ path: "/mayorista/dashboard", label: "Dashboard mayorista", onClick: cerrarMenu }]
-                  : []),
-              ]}
-            />
-
+            {/* ── Dashboard (solo admin) ── */}
             {rol === "admin" && (
-              <>
-                <DropdownNav
-                  id="dropdownVentas"
-                  label="Ventas"
-                  routes={[
-                    {
-                      path: "/vender",
-                      label: "Registrar Venta",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/ventasMensuales",
-                      label: "Ventas mensuales",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/historial",
-                      label: "Historial Ventas",
-                      onClick: cerrarMenu,
-                    },
-                  ]}
-                />
-
-                <DropdownNav
-                  id="dropdownRepo"
-                  label="Reposiciones"
-                  routes={[
-                    {
-                      path: "/ordenes-reposicion",
-                      label: "Órdenes de reposición",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/registrarReposicion",
-                      label: "Cargar Reposición",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/historial",
-                      label: "Historial Ventas",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/historialReposiciones",
-                      label: "Historial Reposición",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/historial-pagos",
-                      label: "Historial Pagos",
-                      onClick: cerrarMenu,
-                    },
-                    {
-                      path: "/resumen-ganancias",
-                      label: "Ganancias",
-                      onClick: cerrarMenu,
-                    },
-                  ]}
-                />
-
-                <li className="nav-item">
-                  <Link
-                    className={`nav-link ${
-                      location.pathname === "/dashboard" ? "active" : ""
-                    }`}
-                    to="/dashboard"
-                    onClick={cerrarMenu}
-                  >
-                    Dashboard
-                  </Link>
-                </li>
-              </>
+              <li className="nav-item">
+                <Link
+                  className={`nav-link ${location.pathname === "/dashboard" ? "active" : ""}`}
+                  to="/dashboard"
+                  onClick={cerrarMenu}
+                >
+                  Dashboard
+                </Link>
+              </li>
             )}
 
             <li className="nav-item">
-              <button
-                className="nav-link btn btn-link text-white"
-                onClick={handleLogout}
-              >
+              <button className="nav-link btn btn-link text-white" onClick={handleLogout}>
                 Cerrar sesión
               </button>
             </li>
+
           </ul>
         </div>
       </div>

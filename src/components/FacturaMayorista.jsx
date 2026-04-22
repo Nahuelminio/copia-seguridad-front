@@ -67,20 +67,31 @@ export default function FacturaMayorista({ pedido, onVolver, modoVer = false, pe
     <>
       {/* ── Estilos de impresión ── */}
       <style>{`
+        @page {
+          size: A4;
+          margin: 15mm;
+        }
         @media print {
-          body > *:not(#factura-wrapper) { display: none !important; }
-          #factura-wrapper { display: block !important; }
+          * { visibility: hidden; }
+          #factura-wrapper, #factura-wrapper * { visibility: visible; }
+          #factura-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+          }
           .no-print { display: none !important; }
-          .factura-container {
+          .factura-container, .factura-container * {
             background: #fff !important;
             color: #000 !important;
-            padding: 32px !important;
+            border-color: #ccc !important;
             box-shadow: none !important;
-            border: none !important;
-            max-width: 100% !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          .factura-table th, .factura-table td { color: #000 !important; border-color: #ccc !important; }
-          .factura-total { color: #000 !important; }
+          .factura-table tr {
+            page-break-inside: avoid;
+          }
         }
       `}</style>
 

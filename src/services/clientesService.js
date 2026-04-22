@@ -23,8 +23,8 @@ function extraerMensajeStock(data) {
   );
 }
 
-const N8N_NUEVO_STOCK_WEBHOOK =
-  "https://nahuelminio04.app.n8n.cloud/webhook/f26edb4e-41a0-4252-a06b-b352fd6fb56f";
+// Llamamos al proxy del backend para evitar CORS (el backend llama a n8n server-to-server)
+const PROXY_MENSAJE_URL = "/clientes/proxy-mensaje";
 
 const clientesService = {
   async obtenerTodos() {
@@ -63,46 +63,24 @@ const clientesService = {
     const res = await api.get("/sucursales");
     return getArray(res);
   },
-async generarMensajeNuevoStock(cliente) {
-  const payload = {
-    modo: "cliente",
-    cliente_id: cliente?.id || null,
-    nombre: cliente?.nombre || "",
-    telefono: cliente?.telefono || "",
-    sucursal_id: cliente?.sucursal_id || null,
-    sucursal_nombre: cliente?.sucursal_nombre || "",
-    observaciones: cliente?.observaciones || "",
-  };
+  async generarMensajeNuevoStock(cliente) {
+    const payload = {
+      modo: "cliente",
+      cliente_id: cliente?.id || null,
+      nombre: cliente?.nombre || "",
+      telefono: cliente?.telefono || "",
+      sucursal_id: cliente?.sucursal_id || null,
+      sucursal_nombre: cliente?.sucursal_nombre || "",
+      observaciones: cliente?.observaciones || "",
+    };
 
-  const response = await fetch(N8N_NUEVO_STOCK_WEBHOOK, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error("Error al consultar el workflow de nuevo stock");
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-
-  let data;
-  if (contentType.includes("application/json")) {
-    data = await response.json();
-  } else {
-    data = await response.text();
-  }
-
-  const mensaje = extraerMensajeStock(data);
-
-  if (!mensaje || !String(mensaje).trim()) {
-    throw new Error("El workflow no devolvió ningún mensaje");
-  }
-
-  return mensaje;
-},
+    const res = await api.post(PROXY_MENSAJE_URL, payload);
+    const mensaje = extraerMensajeStock(res.data);
+    if (!mensaje || !String(mensaje).trim()) {
+      throw new Error("El workflow no devolvió ningún mensaje");
+    }
+    return mensaje;
+  },
 
   async generarMensajeDifusionStock({ sucursal_id, sucursal_nombre }) {
     const payload = {
@@ -111,33 +89,11 @@ async generarMensajeNuevoStock(cliente) {
       sucursal_nombre: sucursal_nombre || "",
     };
 
-    const response = await fetch(N8N_NUEVO_STOCK_WEBHOOK, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error("Error al consultar el workflow de difusión");
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-
-    let data;
-    if (contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-
-    const mensaje = extraerMensajeStock(data);
-
+    const res = await api.post(PROXY_MENSAJE_URL, payload);
+    const mensaje = extraerMensajeStock(res.data);
     if (!mensaje || !String(mensaje).trim()) {
       throw new Error("El workflow no devolvió ningún mensaje");
     }
-
     return mensaje;
   },
 };

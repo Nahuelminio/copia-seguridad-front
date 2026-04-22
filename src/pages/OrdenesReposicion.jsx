@@ -230,8 +230,8 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   const [items, setItems] = useState([]);
   const [mostrarDrop, setMostrarDrop] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const { showConfirm, confirmModal } = useConfirm();
   const inputRef = useRef(null);
+  const dropRef = useRef(null);
 
   // Cargar todos los gustos (sin filtrar por sucursal — es reposición)
   useEffect(() => {
@@ -267,8 +267,12 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   };
 
   const actualizarCantidad = (gusto_id, val) => {
-    const n = parseInt(val) || 1;
-    setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, cantidad: Math.max(1, n) } : i));
+    // Permitir campo vacío mientras escribe; validar al perder foco
+    setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, cantidad: val === "" ? "" : Math.max(1, parseInt(val) || 1) } : i));
+  };
+
+  const fijarCantidad = (gusto_id) => {
+    setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, cantidad: Math.max(1, parseInt(i.cantidad) || 1) } : i));
   };
 
   const eliminarItem = (gusto_id) => setItems((prev) => prev.filter((i) => i.gusto_id !== gusto_id));
@@ -293,11 +297,20 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
     }
   };
 
-  // ESC cierra dropdown
+  // ESC y click afuera cierran dropdown
   useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape") { setMostrarDrop(false); setBusqueda(""); } };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const handleKey = (e) => { if (e.key === "Escape") { setMostrarDrop(false); setBusqueda(""); } };
+    const handleClick = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) {
+        setMostrarDrop(false);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("mousedown", handleClick);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("mousedown", handleClick);
+    };
   }, []);
 
   return (
@@ -332,7 +345,7 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
             <label className="form-label small fw-semibold" style={{ color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "0.7rem" }}>
               Agregar producto
             </label>
-            <div style={{ position: "relative" }}>
+            <div ref={dropRef} style={{ position: "relative" }}>
               <input
                 ref={inputRef}
                 className="form-control"
@@ -400,6 +413,7 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
                         type="number" min="1"
                         value={it.cantidad}
                         onChange={(e) => actualizarCantidad(it.gusto_id, e.target.value)}
+                        onBlur={() => fijarCantidad(it.gusto_id)}
                         style={{ ...inputDark, width: 72, margin: "0 auto", fontWeight: 700, fontSize: "1rem" }}
                       />
                     </div>
@@ -461,7 +475,6 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
           )}
         </div>
       )}
-      {confirmModal}
     </div>
   );
 }
