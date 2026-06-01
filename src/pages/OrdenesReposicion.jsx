@@ -196,22 +196,71 @@ function DetalleOrden({ ordenId, onVolver, onConfirmada }) {
             <thead>
               <tr>
                 <th>Producto</th>
-                <th className="text-center" style={{ width: 100 }}>A reponer</th>
+                <th className="text-center" style={{ width: 90 }}>A reponer</th>
+                {orden.items?.some(i => i.precio_costo != null) && (
+                  <>
+                    <th className="text-center" style={{ width: 100 }}>Costo unit.</th>
+                    <th className="text-center" style={{ width: 100 }}>Costo total</th>
+                    <th className="text-center" style={{ width: 90 }}>Margen</th>
+                  </>
+                )}
                 <th className="text-center" style={{ width: 110 }}>Stock actual</th>
               </tr>
             </thead>
             <tbody>
-              {(orden.items || []).map((it) => (
-                <tr key={it.id}>
-                  <td>
-                    <div className="fw-semibold small">{it.producto_nombre}</div>
-                    <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>{it.gusto}</div>
-                  </td>
-                  <td className="text-center fw-bold">{it.cantidad}</td>
-                  <td className="text-center small" style={{ color: "#4ade80" }}>{it.stock_actual} u.</td>
-                </tr>
-              ))}
+              {(orden.items || []).map((it) => {
+                const tieneCosto = orden.items?.some(i => i.precio_costo != null);
+                const costoTotal = it.precio_costo != null ? it.precio_costo * it.cantidad : null;
+                const margenPct = it.precio_costo != null && it.precio_venta != null && it.precio_costo > 0
+                  ? (((it.precio_venta - it.precio_costo) / it.precio_costo) * 100).toFixed(1)
+                  : null;
+                return (
+                  <tr key={it.id}>
+                    <td>
+                      <div className="fw-semibold small">{it.producto_nombre}</div>
+                      <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>{it.gusto}</div>
+                    </td>
+                    <td className="text-center fw-bold">{it.cantidad}</td>
+                    {tieneCosto && (
+                      <>
+                        <td className="text-center small" style={{ color: "#f87171" }}>
+                          {it.precio_costo != null ? `$${Number(it.precio_costo).toLocaleString("es-AR")}` : "—"}
+                        </td>
+                        <td className="text-center small" style={{ color: "#f87171", fontWeight: 600 }}>
+                          {costoTotal != null ? `$${costoTotal.toLocaleString("es-AR")}` : "—"}
+                        </td>
+                        <td className="text-center">
+                          {margenPct != null ? (
+                            <span style={{
+                              background: Number(margenPct) >= 30 ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+                              color: Number(margenPct) >= 30 ? "#10b981" : "#f59e0b",
+                              borderRadius: 6, padding: "2px 7px", fontSize: "0.78rem", fontWeight: 700,
+                            }}>+{margenPct}%</span>
+                          ) : <span style={{ color: "#475569", fontSize: "0.78rem" }}>—</span>}
+                        </td>
+                      </>
+                    )}
+                    <td className="text-center small" style={{ color: "#4ade80" }}>{it.stock_actual} u.</td>
+                  </tr>
+                );
+              })}
             </tbody>
+            {orden.items?.some(i => i.precio_costo != null) && (
+              <tfoot>
+                <tr style={{ borderTop: "2px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.2)" }}>
+                  <td className="fw-bold small" style={{ color: "#94a3b8", padding: "8px 12px" }}>Total</td>
+                  <td className="text-center fw-bold">{orden.items.reduce((s, i) => s + i.cantidad, 0)} u.</td>
+                  <td />
+                  <td className="text-center fw-bold" style={{ color: "#f87171" }}>
+                    ${orden.items
+                      .filter(i => i.precio_costo != null)
+                      .reduce((s, i) => s + i.precio_costo * i.cantidad, 0)
+                      .toLocaleString("es-AR")}
+                  </td>
+                  <td /><td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -222,6 +271,8 @@ function DetalleOrden({ ordenId, onVolver, onConfirmada }) {
 
 // ─── Formulario nueva orden ───────────────────────────────────────────────────
 
+const CENTRAL_ID = 7;
+
 function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   const [sucursalId, setSucursalId] = useState("");
   const [notas, setNotas] = useState("");
@@ -230,6 +281,7 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   const [items, setItems] = useState([]);
   const [mostrarDrop, setMostrarDrop] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [tipoCambio, setTipoCambio] = useState("");
   const inputRef = useRef(null);
   const dropRef = useRef(null);
 
@@ -249,6 +301,12 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
     ).slice(0, 30);
   }, [busqueda, productos]);
 
+  const esCentral = String(sucursalId) === String(CENTRAL_ID);
+
+  // Helper: convierte USD a ARS usando tipoCambio
+  const tc = tipoCambio !== "" ? Number(tipoCambio) : null;
+  const usdToArs = (usd) => (tc != null && usd !== "" && usd != null ? Number(usd) * tc : null);
+
   const agregarItem = (p) => {
     const id = p.gusto_id || p.id;
     if (items.find((i) => i.gusto_id === id)) {
@@ -259,6 +317,7 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
         producto_nombre: p.producto_nombre || p.nombre || "—",
         gusto: p.gusto || p.nombre_gusto || "—",
         cantidad: 1,
+        precio_costo: "",
       }]);
     }
     setBusqueda("");
@@ -267,12 +326,15 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   };
 
   const actualizarCantidad = (gusto_id, val) => {
-    // Permitir campo vacío mientras escribe; validar al perder foco
     setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, cantidad: val === "" ? "" : Math.max(1, parseInt(val) || 1) } : i));
   };
 
   const fijarCantidad = (gusto_id) => {
     setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, cantidad: Math.max(1, parseInt(i.cantidad) || 1) } : i));
+  };
+
+  const actualizarPrecioCosto = (gusto_id, val) => {
+    setItems((prev) => prev.map((i) => i.gusto_id === gusto_id ? { ...i, precio_costo: val } : i));
   };
 
   const eliminarItem = (gusto_id) => setItems((prev) => prev.filter((i) => i.gusto_id !== gusto_id));
@@ -286,7 +348,18 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
       const res = await axios.post("/ordenes-reposicion", {
         sucursal_id: parseInt(sucursalId),
         notas: notas.trim() || undefined,
-        items: items.map((i) => ({ gusto_id: i.gusto_id, cantidad: i.cantidad })),
+        items: items.map((i) => {
+          let pc = null;
+          if (esCentral && i.precio_costo !== "") {
+            const usd = Number(i.precio_costo);
+            pc = tc != null ? usd * tc : usd; // convert to ARS if exchange rate set, else treat as ARS
+          }
+          return {
+            gusto_id: i.gusto_id,
+            cantidad: i.cantidad,
+            ...(pc != null ? { precio_costo: pc } : {}),
+          };
+        }),
       });
       toast.success("Orden creada como pendiente");
       onGuardada(res.data.id);
@@ -337,6 +410,41 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
           </select>
         </div>
       </div>
+
+      {/* Tipo de cambio (solo Central) */}
+      {esCentral && (
+        <div className="card mb-3" style={{ ...cardStyle, border: "1px solid rgba(245,158,11,0.35)" }}>
+          <div className="card-body">
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label className="form-label small fw-semibold" style={{ color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "0.7rem" }}>
+                  💱 Tipo de cambio USD → $ ARS
+                </label>
+                <div className="d-flex align-items-center gap-2">
+                  <span style={{ color: "#94a3b8", fontSize: "0.9rem", flexShrink: 0 }}>1 USD =</span>
+                  <input
+                    className="form-control form-control-sm"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="ej: 1200"
+                    value={tipoCambio}
+                    onChange={(e) => setTipoCambio(e.target.value)}
+                    style={{ ...inputDark, maxWidth: 130, borderColor: "rgba(245,158,11,0.5)", fontWeight: 700, fontSize: "1rem" }}
+                  />
+                  <span style={{ color: "#94a3b8", fontSize: "0.9rem", flexShrink: 0 }}>$ ARS</span>
+                </div>
+              </div>
+              <div style={{ color: "#64748b", fontSize: "0.78rem", maxWidth: 260 }}>
+                {tc != null
+                  ? <span style={{ color: "#f59e0b" }}>Cargá los costos en USD — el sistema los convierte a $ ARS automáticamente al guardar.</span>
+                  : <span>Completá el tipo de cambio para cargar costos en USD. Si lo dejás vacío, el campo de costo se tomará como pesos.</span>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Buscador */}
       {sucursalId && (
@@ -394,15 +502,20 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
             {items.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <div className="small fw-semibold mb-2" style={{ color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontSize: "0.7rem" }}>
-                  PRODUCTOS A REPONER · {items.length} producto{items.length !== 1 ? "s" : ""} · {items.reduce((s, i) => s + i.cantidad, 0)} u. en total
+                  PRODUCTOS A REPONER · {items.length} producto{items.length !== 1 ? "s" : ""} · {items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0)} u. en total
+                  {esCentral && !tc && <span style={{ color: "#f59e0b", marginLeft: 8 }}>— Central: podés cargar precio de costo</span>}
+                  {esCentral && tc != null && <span style={{ color: "#f59e0b", marginLeft: 8 }}>— Costos en USD · TC: ${tc.toLocaleString("es-AR")}</span>}
                 </div>
-                {items.map((it) => (
+                {items.map((it) => {
+                  const arsUnit = usdToArs(it.precio_costo);
+                  const arsTotal = arsUnit != null ? arsUnit * (Number(it.cantidad) || 0) : null;
+                  return (
                   <div key={it.gusto_id} style={{
-                    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
                     background: "rgba(255,255,255,0.04)", borderRadius: 10, marginBottom: 6,
-                    border: "1px solid rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.07)", flexWrap: "wrap",
                   }}>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 120 }}>
                       <div style={{ color: "#fff", fontWeight: 600, fontSize: "0.88rem" }}>{it.producto_nombre}</div>
                       <div style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{it.gusto}</div>
                     </div>
@@ -417,6 +530,34 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
                         style={{ ...inputDark, width: 72, margin: "0 auto", fontWeight: 700, fontSize: "1rem" }}
                       />
                     </div>
+                    {esCentral && (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.68rem", color: "#f59e0b", marginBottom: 4 }}>
+                          {tc != null ? "COSTO USD" : "COSTO UNIT. $"}
+                        </div>
+                        <input
+                          className="form-control form-control-sm text-center"
+                          type="number" min="0" step="0.01"
+                          value={it.precio_costo}
+                          onChange={(e) => actualizarPrecioCosto(it.gusto_id, e.target.value)}
+                          placeholder="—"
+                          style={{ ...inputDark, width: 90, margin: "0 auto", fontSize: "0.92rem", borderColor: tc != null ? "rgba(245,158,11,0.5)" : undefined }}
+                        />
+                        {tc != null && arsUnit != null && (
+                          <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: 3 }}>
+                            = ${arsUnit.toLocaleString("es-AR", { maximumFractionDigits: 0 })} c/u
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {esCentral && tc != null && arsTotal != null && (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.68rem", color: "#64748b", marginBottom: 4 }}>SUBTOTAL ARS</div>
+                        <div style={{ color: "#f87171", fontWeight: 600, fontSize: "0.88rem" }}>
+                          ${arsTotal.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </div>
+                      </div>
+                    )}
                     <button
                       onClick={() => eliminarItem(it.gusto_id)}
                       style={{
@@ -426,7 +567,40 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
                       }}
                     >×</button>
                   </div>
-                ))}
+                  );
+                })}
+                {/* Totals summary when TC is set */}
+                {esCentral && tc != null && items.some(i => i.precio_costo !== "") && (() => {
+                  const totalUsd = items.reduce((s, i) => {
+                    const usd = i.precio_costo !== "" ? Number(i.precio_costo) : 0;
+                    return s + usd * (Number(i.cantidad) || 0);
+                  }, 0);
+                  const totalArs = totalUsd * tc;
+                  return (
+                    <div style={{
+                      marginTop: 10, padding: "10px 14px",
+                      background: "rgba(245,158,11,0.08)", borderRadius: 8,
+                      border: "1px solid rgba(245,158,11,0.25)",
+                      display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center",
+                    }}>
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total USD </span>
+                        <span style={{ color: "#f59e0b", fontWeight: 700 }}>
+                          USD {totalUsd.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>= Total ARS </span>
+                        <span style={{ color: "#f87171", fontWeight: 700 }}>
+                          ${totalArs.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                      <div style={{ color: "#475569", fontSize: "0.72rem" }}>
+                        TC: 1 USD = ${tc.toLocaleString("es-AR")}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

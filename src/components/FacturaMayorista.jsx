@@ -1,7 +1,62 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
+
+function useConfirm() {
+  const [state, setState] = useState({ show: false, title: "", message: "", resolve: null });
+
+  const showConfirm = (title, message) =>
+    new Promise((resolve) => setState({ show: true, title, message, resolve }));
+
+  const handleOk = () => {
+    setState((s) => ({ ...s, show: false }));
+    state.resolve(true);
+  };
+
+  const handleCancel = () => {
+    setState((s) => ({ ...s, show: false }));
+    state.resolve(false);
+  };
+
+  const confirmModal = state.show ? (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
+        zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={handleCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#1e2530", border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 14, padding: "28px 32px", maxWidth: 440, width: "90%",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        <h6 style={{ color: "#fff", fontWeight: 700, marginBottom: 10 }}>{state.title}</h6>
+        <p style={{ color: "#94a3b8", marginBottom: 24, lineHeight: 1.6, whiteSpace: "pre-line" }}>{state.message}</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={handleCancel}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontWeight: 500 }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleOk}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#22c55e", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          >
+            Confirmar pedido
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return { showConfirm, confirmModal };
+}
 
 function formatUsd(n) {
   return Number(n || 0).toLocaleString("es-AR", {
@@ -26,6 +81,7 @@ function formatFecha(iso) {
 export default function FacturaMayorista({ pedido, onVolver, modoVer = false, pedidoId }) {
   const navigate = useNavigate();
   const facturaRef = useRef(null);
+  const { showConfirm, confirmModal } = useConfirm();
 
   // Preferir siempre el valor del servidor; recalcular sólo si no existe
   const totalArs =
@@ -45,12 +101,9 @@ export default function FacturaMayorista({ pedido, onVolver, modoVer = false, pe
 
     // 4. Confirmación explícita antes de descontar stock
     const cantidadItems = (pedido.items || []).length;
-    const confirmado = window.confirm(
-      `¿Confirmar este pedido?\n\n` +
-      `Cliente: ${pedido.cliente_nombre}\n` +
-      `Productos: ${cantidadItems} ítem${cantidadItems !== 1 ? "s" : ""}\n` +
-      `Total: USD ${Number(pedido.total_usd || 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}\n\n` +
-      `Esta acción descontará el stock de Central y no se puede deshacer.`
+    const confirmado = await showConfirm(
+      "Confirmar pedido",
+      `Cliente: ${pedido.cliente_nombre}\nProductos: ${cantidadItems} ítem${cantidadItems !== 1 ? "s" : ""}\nTotal: USD ${Number(pedido.total_usd || 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}\n\nEsta acción descontará el stock de Central y no se puede deshacer.`
     );
     if (!confirmado) return;
 
@@ -65,6 +118,7 @@ export default function FacturaMayorista({ pedido, onVolver, modoVer = false, pe
 
   return (
     <>
+      {confirmModal}
       {/* ── Estilos de impresión ── */}
       <style>{`
         @page {

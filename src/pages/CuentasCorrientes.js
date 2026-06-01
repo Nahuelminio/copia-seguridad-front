@@ -210,12 +210,19 @@ export default function CuentasCorrientes() {
   const historialConSaldo = useMemo(() => {
     if (!cuentaSel || !historial.length) return [];
 
+    // Reconstrucción del saldo acumulado:
+    // El historial viene ordenado DESC (más reciente primero).
+    // Partimos del saldo actual y deshacemos cada operación para obtener
+    // el saldo ANTES de cada movimiento; luego lo mostramos como saldo POST-operación
+    // invirtiendo el delta correctamente.
     let running = Number(cuentaSel.saldo || 0);
 
     return historial.map((m) => {
-      const saldoAcumulado = running;
       const delta =
         m.tipo === "CARGO" ? Number(m.monto || 0) : -Number(m.monto || 0);
+      // saldo_acumulado = saldo después de este movimiento
+      const saldoAcumulado = running;
+      // deshacemos el movimiento para el siguiente paso hacia atrás en el tiempo
       running = running - delta;
 
       return {

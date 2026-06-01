@@ -5,6 +5,61 @@ import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import FacturaMayorista from "../components/FacturaMayorista";
 
+function useConfirm() {
+  const [state, setState] = useState({ show: false, title: "", message: "", resolve: null });
+
+  const showConfirm = (title, message) =>
+    new Promise((resolve) => setState({ show: true, title, message, resolve }));
+
+  const handleOk = () => {
+    setState((s) => ({ ...s, show: false }));
+    state.resolve(true);
+  };
+
+  const handleCancel = () => {
+    setState((s) => ({ ...s, show: false }));
+    state.resolve(false);
+  };
+
+  const confirmModal = state.show ? (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
+        zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={handleCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#1e2530", border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 14, padding: "28px 32px", maxWidth: 420, width: "90%",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        <h6 style={{ color: "#fff", fontWeight: 700, marginBottom: 10 }}>{state.title}</h6>
+        <p style={{ color: "#94a3b8", marginBottom: 24, lineHeight: 1.6, whiteSpace: "pre-line" }}>{state.message}</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={handleCancel}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontWeight: 500 }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleOk}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#ef4444", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return { showConfirm, confirmModal };
+}
+
 function formatUsd(n) {
   return Number(n || 0).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -60,6 +115,7 @@ export default function PedidosMayorista() {
   const [clientes, setClientes] = useState([]);                   // 6. lista clientes para filtro
   const [mostrarDropFiltro, setMostrarDropFiltro] = useState(false);
   const [deletingId, setDeletingId] = useState(null);            // loading en botón cancelar
+  const { showConfirm, confirmModal } = useConfirm();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -89,7 +145,8 @@ export default function PedidosMayorista() {
   }, [cargar]);
 
   const cancelarPedido = async (id) => {
-    if (!window.confirm("¿Cancelar este pedido?")) return;
+    const ok = await showConfirm("Cancelar pedido", "¿Estás seguro que querés cancelar este pedido?");
+    if (!ok) return;
     setDeletingId(id);
     try {
       await axios.delete(`/mayorista/pedidos/${id}`);
@@ -124,6 +181,7 @@ export default function PedidosMayorista() {
 
   return (
     <div className="container py-4" style={{ maxWidth: 960 }}>
+      {confirmModal}
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h4 className="mb-0 fw-bold">Pedidos Mayoristas</h4>

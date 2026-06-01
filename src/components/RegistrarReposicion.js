@@ -16,7 +16,8 @@ const lStyle = {
 };
 
 function RegistrarReposicion() {
-  const [productos, setProductos] = useState([]);
+  const [gustosTodos, setGustosTodos] = useState([]);   // todos los gustos del sistema
+  const [stockSucursal, setStockSucursal] = useState([]); // stock de la sucursal seleccionada
   const [sucursales, setSucursales] = useState([]);
 
   const [codigoBarra, setCodigoBarra] = useState("");
@@ -37,10 +38,13 @@ function RegistrarReposicion() {
   const autocompleteRef = useRef(null);
   const inputBuscarRef = useRef(null);
 
+  const CENTRAL_ID = "7";
+
   const [form, setForm] = useState({
     gusto_id: "",
     sucursal_id: "",
     cantidad: "",
+    precio_costo: "",
   });
 
   const normalizar = (str = "") =>
@@ -53,16 +57,17 @@ function RegistrarReposicion() {
 
   const labelItem = (p) => `${p.producto_nombre} - ${p.gusto}`;
 
+  // Carga inicial: todos los gustos + sucursales
   useEffect(() => {
     const fetchAll = async () => {
       try {
         setLoadingProductos(true);
         setLoadingSucursales(true);
-        const [prodRes, sucRes] = await Promise.all([
-          axios.get("/"),
+        const [gustosRes, sucRes] = await Promise.all([
+          axios.get("/gustos-todos"),
           axios.get("/sucursales"),
         ]);
-        setProductos(prodRes.data || []);
+        setGustosTodos(gustosRes.data || []);
         setSucursales(sucRes.data || []);
       } catch {
         toast.error("Error al cargar datos iniciales");
@@ -74,10 +79,18 @@ function RegistrarReposicion() {
     fetchAll();
   }, []);
 
+  // Cuando cambia la sucursal, carga el stock de esa sucursal para mostrar cantidades
+  useEffect(() => {
+    if (!form.sucursal_id) { setStockSucursal([]); return; }
+    axios.get(`/disponibles?sucursal_id=${form.sucursal_id}`)
+      .then(r => setStockSucursal(r.data || []))
+      .catch(() => setStockSucursal([]));
+  }, [form.sucursal_id]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "sucursal_id") {
-      setForm((prev) => ({ ...prev, sucursal_id: value, gusto_id: "", cantidad: "" }));
+      setForm((prev) => ({ ...prev, sucursal_id: value, gusto_id: "", cantidad: "", precio_costo: "" }));
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
@@ -89,22 +102,24 @@ function RegistrarReposicion() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const productosFiltrados = useMemo(() => {
-    if (!form.sucursal_id) return [];
-    return productos
-      .filter((p) => String(p.sucursal_id) === String(form.sucursal_id))
-      .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0));
-  }, [productos, form.sucursal_id]);
+  // Todos los gustos enriquecidos con el stock de la sucursal seleccionada
+  const productosConStock = useMemo(() => {
+    return gustosTodos.map((g) => {
+      const stockRow = stockSucursal.find((s) => String(s.gusto_id) === String(g.gusto_id));
+      return { ...g, stock: stockRow ? Number(stockRow.stock) : 0 };
+    });
+  }, [gustosTodos, stockSucursal]);
 
   const seleccionado = useMemo(() => {
-    return productosFiltrados.find((p) => String(p.gusto_id) === String(form.gusto_id)) || null;
-  }, [productosFiltrados, form.gusto_id]);
+    return productosConStock.find((p) => String(p.gusto_id) === String(form.gusto_id)) || null;
+  }, [productosConStock, form.gusto_id]);
 
   const resultados = useMemo(() => {
+    if (!form.sucursal_id) return [];
     const q = normalizar(query);
-    let list = productosFiltrados;
+    let list = productosConStock;
     if (!mostrarSinStock) {
-      list = list.filter((p) => Number(p.stock) > 0);
+      list = list.filter((p) => p.stock > 0);
     }
     if (q) {
       list = list.filter((p) => {
@@ -114,7 +129,7 @@ function RegistrarReposicion() {
       });
     }
     return list.slice(0, 12);
-  }, [productosFiltrados, query, mostrarSinStock]);
+  }, [productosConStock, form.sucursal_id, query, mostrarSinStock]);
 
   useEffect(() => {
     const onMouseDown = (e) => {
@@ -218,21 +233,28 @@ function RegistrarReposicion() {
     }
     try {
       setLoadingSubmit(true);
-      await axios.post("/reposicion", {
+      const payload = {
         gusto_id: Number(form.gusto_id),
         sucursal_id: Number(form.sucursal_id),
         cantidad: cant,
-      });
+      };
+      if (form.sucursal_id === CENTRAL_ID && form.precio_costo !== "") {
+        payload.precio_costo = Number(form.precio_costo);
+      }
+      await axios.post("/reposicion", payload);
       toast.success("Reposición registrada correctamente");
-      setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "" }));
+      setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "", precio_costo: "" }));
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
       setIsOpen(false);
       setHighlightIndex(-1);
+      // Refresca el stock de la sucursal seleccionada
       try {
-        const prodRes = await axios.get("/");
-        setProductos(prodRes.data || []);
+        if (form.sucursal_id) {
+          const r = await axios.get(`/disponibles?sucursal_id=${form.sucursal_id}`);
+          setStockSucursal(r.data || []);
+        }
       } catch {}
       inputBuscarRef.current?.focus();
     } catch {
@@ -483,7 +505,7 @@ function RegistrarReposicion() {
         </div>
 
         {/* Cantidad */}
-        <div className="mb-4">
+        <div className="mb-3">
           <label style={lStyle}>Cantidad a reponer</label>
           <input
             type="number"
@@ -497,6 +519,38 @@ function RegistrarReposicion() {
             style={iStyle}
           />
         </div>
+
+        {/* Precio de costo — solo Central */}
+        {form.sucursal_id === CENTRAL_ID && (
+          <div className="mb-4">
+            <label style={lStyle}>
+              Precio de costo ($)
+              <span style={{ color: "#475569", fontWeight: 400, marginLeft: 6 }}>— opcional</span>
+            </label>
+            <input
+              type="number"
+              className="form-control"
+              name="precio_costo"
+              value={form.precio_costo}
+              onChange={handleChange}
+              min="0"
+              step="0.01"
+              placeholder="¿Cuánto pagaste por unidad?"
+              disabled={!form.gusto_id || loadingSubmit}
+              style={iStyle}
+            />
+            {form.precio_costo !== "" && seleccionado?.precio && (
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
+                Precio de venta actual: <strong style={{ color: "#e2e8f0" }}>${Number(seleccionado.precio).toLocaleString("es-AR")}</strong>
+                {Number(form.precio_costo) > 0 && (
+                  <span style={{ marginLeft: 8, color: "#10b981" }}>
+                    → Margen: {(((Number(seleccionado.precio) - Number(form.precio_costo)) / Number(form.precio_costo)) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           type="submit"

@@ -11,11 +11,14 @@ const ProductoEditorMasivo = ({ show, onClose }) => {
  useEffect(() => {
    if (!show) return; // ⛔ No hagas nada si el modal está cerrado
 
+   let isMounted = true;
+
    const fetchProductos = async () => {
      try {
        const res = await axios.get(`${API}/`, {
          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
        });
+       if (!isMounted) return;
        const productosConDefault = res.data.map((p) => ({
          ...p,
          stock: p.stock ?? 0,
@@ -24,12 +27,13 @@ const ProductoEditorMasivo = ({ show, onClose }) => {
        }));
        setProductos(productosConDefault);
      } catch (error) {
-       console.error("❌ Error al cargar productos:", error);
+       if (isMounted) console.error("❌ Error al cargar productos:", error);
      }
    };
 
-   fetchProductos(); // ✅ Ejecutar solo cuando `show === true`
- }, [show]);
+   fetchProductos();
+   return () => { isMounted = false; };
+ }, [show, API]);
 
 
   const handleChange = (gusto_id, sucursal_id, campo, valor) => {

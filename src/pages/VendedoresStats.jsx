@@ -1,0 +1,651 @@
+import React, { useEffect, useState, useCallback } from "react";
+import axios from "../utils/axiosInstance";
+import { toast } from "react-toastify";
+
+// ─── Estilos compartidos ──────────────────────────────────────────────────────
+
+const card = {
+  background: "#111827",
+  border: "1px solid #1e293b",
+  borderRadius: 12,
+  padding: "20px 24px",
+};
+
+const labelSt = {
+  color: "#64748b",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+};
+
+const inputSt = {
+  background: "#0f172a",
+  border: "1px solid #1e293b",
+  color: "#e2e8f0",
+  borderRadius: 7,
+};
+
+const meses = [
+  "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+const fmt = (n) =>
+  Number(n).toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  });
+
+function username(email = "") {
+  return email.split("@")[0];
+}
+
+// ─── Semana ISO actual ────────────────────────────────────────────────────────
+
+function getSemanaActual() {
+  const hoy = new Date();
+  const u = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+  const dia = u.getUTCDay() || 7;
+  u.setUTCDate(u.getUTCDate() + 4 - dia);
+  const ini = new Date(Date.UTC(u.getUTCFullYear(), 0, 1));
+  return {
+    semana: Math.ceil(((u - ini) / 86400000 + 1) / 7),
+    anio: u.getUTCFullYear(),
+  };
+}
+
+// ─── NavPeriod: flechas para semana o mes ────────────────────────────────────
+
+function NavPeriod({ label, display, onPrev, onNext }) {
+  return (
+    <div>
+      <p style={labelSt} className="mb-1">{label}</p>
+      <div className="d-flex align-items-center gap-2">
+        <button className="btn btn-sm btn-outline-secondary" onClick={onPrev}>‹</button>
+        <span style={{ color: "#f1f5f9", fontWeight: 600, minWidth: 130, textAlign: "center" }}>
+          {display}
+        </span>
+        <button className="btn btn-sm btn-outline-secondary" onClick={onNext}>›</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── DesgloseSucursales ───────────────────────────────────────────────────────
+
+function DesgloseSucursales({ sucursales }) {
+  if (!sucursales?.length) return null;
+  return (
+    <div style={{ marginTop: 5, paddingLeft: 12, borderLeft: "2px solid #1e293b" }}>
+      {sucursales.map((sc) => (
+        <div
+          key={sc.sucursal_id}
+          className="d-flex justify-content-between align-items-center"
+          style={{ fontSize: "0.75rem", padding: "2px 0" }}
+        >
+          <span style={{ color: "#64748b" }}>
+            <span style={{ color: "#3b82f6", marginRight: 5 }}>↳</span>
+            {sc.sucursal_nombre}
+          </span>
+          <span style={{ color: "#94a3b8" }}>
+            {sc.total_pares} u. · {fmt(sc.total_monto)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Panel deudas ─────────────────────────────────────────────────────────────
+
+function PanelDeudas() {
+  const [deudas, setDeudas]       = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [pagoModal, setPagoModal] = useState(null);   // { id, email }
+  const [monto, setMonto]         = useState("");
+  const [metodo, setMetodo]       = useState("efectivo");
+  const [fecha, setFecha]         = useState(new Date().toISOString().slice(0, 10));
+  const [notas, setNotas]         = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [historial, setHistorial] = useState(null);   // { id, rows }
+
+  const cargarDeudas = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get("/vendedores/deudas");
+      setDeudas(data);
+    } catch {
+      toast.error("Error al cargar deudas");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarDeudas(); }, [cargarDeudas]);
+
+  const abrirPago = (v) => {
+    setPagoModal({ id: v.id, email: v.email });
+    setMonto("");
+    setNotas("");
+    setFecha(new Date().toISOString().slice(0, 10));
+  };
+
+  const cerrarPago = () => setPagoModal(null);
+
+  const registrarPago = async () => {
+    if (!monto || Number(monto) <= 0) { toast.error("Ingresá un monto válido"); return; }
+    setGuardando(true);
+    try {
+      await axios.post(`/vendedores/${pagoModal.id}/pago`, {
+        monto: Number(monto), metodo, fecha, notas,
+      });
+      toast.success("Pago registrado ✅");
+      cerrarPago();
+      cargarDeudas();
+    } catch (e) {
+      toast.error(e.response?.data?.error || "Error al registrar pago");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const toggleHistorial = async (v) => {
+    if (historial?.id === v.id) { setHistorial(null); return; }
+    try {
+      const { data } = await axios.get(`/vendedores/${v.id}/pagos`);
+      setHistorial({ id: v.id, rows: data });
+    } catch {
+      toast.error("Error al cargar historial");
+    }
+  };
+
+  if (loading) return (
+    <div className="text-center py-5">
+      <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+    </div>
+  );
+
+  if (!deudas) return null;
+
+  const totalDeuda = deudas.reduce((s, v) => s + v.deuda, 0);
+
+  return (
+    <div>
+      {/* KPIs rápidos */}
+      <div className="row g-3 mb-4">
+        {[
+          { label: "Facturado total", value: fmt(deudas.reduce((s, v) => s + v.total_facturado, 0)), color: "#94a3b8" },
+          { label: "Pagado total",    value: fmt(deudas.reduce((s, v) => s + v.total_pagado, 0)),    color: "#10b981" },
+          { label: "Deuda pendiente", value: fmt(totalDeuda), color: totalDeuda <= 0 ? "#10b981" : "#f87171" },
+        ].map(({ label, value, color }) => (
+          <div className="col-12 col-md-4" key={label}>
+            <div style={{ ...card, padding: "14px 20px", borderColor: `${color}25` }}>
+              <p style={{ ...labelSt, marginBottom: 4 }}>{label}</p>
+              <p style={{ color, fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabla */}
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        <table className="table table-dark mb-0" style={{ fontSize: "0.88rem" }}>
+          <thead>
+            <tr style={{ borderColor: "#1e293b", color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase" }}>
+              <th style={{ padding: "12px 16px" }}>Vendedor</th>
+              <th style={{ padding: "12px 16px", textAlign: "right" }}>Facturado</th>
+              <th style={{ padding: "12px 16px", textAlign: "right" }}>Pagado</th>
+              <th style={{ padding: "12px 16px", textAlign: "right" }}>Deuda</th>
+              <th style={{ padding: "12px 16px", textAlign: "center", width: 160 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {deudas.map((v) => {
+              const deudaColor = v.deuda <= 0 ? "#10b981" : v.deuda > 50000 ? "#f87171" : "#f59e0b";
+              const abierto    = historial?.id === v.id;
+              return (
+                <React.Fragment key={v.id}>
+                  <tr style={{ borderColor: "#1e293b" }}>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{username(v.email)}</span>
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "right", color: "#64748b" }}>
+                      {fmt(v.total_facturado)}
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "right", color: "#10b981", fontWeight: 600 }}>
+                      {fmt(v.total_pagado)}
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, color: deudaColor }}>
+                      {fmt(v.deuda)}{v.deuda <= 0 && " ✅"}
+                    </td>
+                    <td style={{ padding: "10px 16px", textAlign: "center" }}>
+                      <div className="d-flex gap-2 justify-content-center">
+                        <button
+                          onClick={() => abrirPago(v)}
+                          style={{
+                            background: "#10b981", border: "none", color: "#fff",
+                            borderRadius: 6, padding: "4px 12px",
+                            fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          + Pago
+                        </button>
+                        <button
+                          onClick={() => toggleHistorial(v)}
+                          style={{
+                            background: abierto ? "#1e3a5f" : "#1e293b",
+                            border: `1px solid ${abierto ? "#3b82f6" : "#334155"}`,
+                            color: abierto ? "#93c5fd" : "#94a3b8",
+                            borderRadius: 6, padding: "4px 12px",
+                            fontSize: "0.78rem", cursor: "pointer",
+                          }}
+                        >
+                          {abierto ? "Cerrar" : "Historial"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* Historial inline */}
+                  {abierto && (
+                    <tr style={{ borderColor: "#1e293b" }}>
+                      <td colSpan={5} style={{ padding: "0 24px 14px 40px", background: "#0a1120" }}>
+                        {historial.rows.length === 0 ? (
+                          <p style={{ color: "#475569", fontSize: "0.8rem", margin: "10px 0 0" }}>
+                            Sin pagos registrados.
+                          </p>
+                        ) : (
+                          <table style={{ width: "100%", fontSize: "0.78rem", marginTop: 10 }}>
+                            <thead>
+                              <tr style={{ color: "#475569", borderBottom: "1px solid #1e293b" }}>
+                                <th style={{ padding: "4px 8px 6px", fontWeight: 600 }}>Fecha</th>
+                                <th style={{ padding: "4px 8px 6px", fontWeight: 600 }}>Método</th>
+                                <th style={{ padding: "4px 8px 6px", fontWeight: 600, textAlign: "right" }}>Monto</th>
+                                <th style={{ padding: "4px 8px 6px", fontWeight: 600 }}>Notas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {historial.rows.map((p) => (
+                                <tr key={p.id}>
+                                  <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                                    {new Date(p.fecha).toLocaleDateString("es-AR", {
+                                      day: "2-digit", month: "2-digit", year: "numeric",
+                                    })}
+                                  </td>
+                                  <td style={{ padding: "4px 8px", color: "#94a3b8", textTransform: "capitalize" }}>
+                                    {p.metodo}
+                                  </td>
+                                  <td style={{ padding: "4px 8px", color: "#10b981", fontWeight: 600, textAlign: "right" }}>
+                                    {fmt(p.monto)}
+                                  </td>
+                                  <td style={{ padding: "4px 8px", color: "#475569" }}>{p.notas || "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal pago */}
+      {pagoModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+            zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={cerrarPago}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#111827", border: "1px solid #1e293b",
+              borderRadius: 14, padding: "28px 32px",
+              maxWidth: 400, width: "90%",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+            }}
+          >
+            <div className="mb-4">
+              <h6 style={{ color: "#f1f5f9", fontWeight: 700, margin: 0 }}>Registrar pago</h6>
+              <p style={{ color: "#10b981", fontSize: "0.88rem", margin: "4px 0 0", fontWeight: 600 }}>
+                {username(pagoModal.email)}
+              </p>
+            </div>
+
+            <div className="mb-3">
+              <label style={{ ...labelSt, display: "block", marginBottom: 6 }}>Monto $</label>
+              <input
+                type="number" className="form-control form-control-sm" style={inputSt}
+                value={monto} onChange={(e) => setMonto(e.target.value)}
+                placeholder="0" autoFocus
+              />
+            </div>
+            <div className="mb-3">
+              <label style={{ ...labelSt, display: "block", marginBottom: 6 }}>Método</label>
+              <select className="form-select form-select-sm" style={inputSt} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="mp">Mercado Pago</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div className="mb-3">
+              <label style={{ ...labelSt, display: "block", marginBottom: 6 }}>Fecha</label>
+              <input
+                type="date" className="form-control form-control-sm" style={inputSt}
+                value={fecha} onChange={(e) => setFecha(e.target.value)}
+              />
+            </div>
+            <div className="mb-5">
+              <label style={{ ...labelSt, display: "block", marginBottom: 6 }}>Notas (opcional)</label>
+              <input
+                type="text" className="form-control form-control-sm" style={inputSt}
+                value={notas} onChange={(e) => setNotas(e.target.value)}
+                placeholder="Ej: pago semana 22"
+              />
+            </div>
+
+            <div className="d-flex gap-2 justify-content-end">
+              <button
+                onClick={cerrarPago}
+                style={{
+                  padding: "8px 20px", borderRadius: 8,
+                  border: "1px solid #1e293b", background: "transparent",
+                  color: "#94a3b8", cursor: "pointer", fontWeight: 500,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={registrarPago}
+                disabled={guardando}
+                style={{
+                  padding: "8px 24px", borderRadius: 8, border: "none",
+                  background: guardando ? "#059669" : "#10b981",
+                  color: "#fff", fontWeight: 700, cursor: guardando ? "default" : "pointer",
+                  transition: "background 0.15s",
+                }}
+              >
+                {guardando ? "Guardando…" : "Confirmar pago"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Card de vendedor (semana / mes) ─────────────────────────────────────────
+
+function VendedorCard({ v, tab }) {
+  return (
+    <div style={card}>
+      {/* Header */}
+      <div className="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <p style={{ color: "#f1f5f9", fontWeight: 700, fontSize: "1rem", margin: 0 }}>
+            {username(v.email)}
+          </p>
+          <p style={{ color: "#475569", fontSize: "0.75rem", margin: 0 }}>{v.email}</p>
+        </div>
+        <div className="text-end">
+          <p style={{ color: "#10b981", fontWeight: 700, fontSize: "1.15rem", margin: 0 }}>
+            {fmt(v.total_monto)}
+          </p>
+          <p style={{ color: "#64748b", fontSize: "0.8rem", margin: 0 }}>
+            {v.total_pares} par{v.total_pares !== 1 ? "es" : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Sin ventas */}
+      {tab === "semana" && v.dias?.length === 0 && (
+        <p style={{ color: "#334155", fontSize: "0.82rem", margin: 0 }}>Sin ventas esta semana.</p>
+      )}
+      {tab === "mes" && v.semanas?.length === 0 && (
+        <p style={{ color: "#334155", fontSize: "0.82rem", margin: 0 }}>Sin ventas este mes.</p>
+      )}
+
+      {/* Desglose semanal */}
+      {tab === "semana" && v.dias?.length > 0 && (
+        <div style={{ borderTop: "1px solid #1e293b", paddingTop: 12 }}>
+          <p style={labelSt} className="mb-2">Por día</p>
+          {v.dias.map((d) => (
+            <div key={d.fecha} style={{ marginBottom: 10 }}>
+              <div className="d-flex justify-content-between align-items-center">
+                <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
+                  {d.dia}{" "}
+                  <span style={{ color: "#475569", fontSize: "0.75rem" }}>
+                    {new Date(d.fecha + "T00:00:00").toLocaleDateString("es-AR", {
+                      day: "2-digit", month: "2-digit",
+                    })}
+                  </span>
+                </span>
+                <span style={{ color: "#e2e8f0", fontSize: "0.88rem", fontWeight: 600 }}>
+                  {fmt(d.total_monto)}{" "}
+                  <span style={{ color: "#64748b", fontWeight: 400, fontSize: "0.78rem" }}>
+                    ({d.total_pares} u.)
+                  </span>
+                </span>
+              </div>
+              <DesgloseSucursales sucursales={d.sucursales} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Desglose mensual */}
+      {tab === "mes" && v.semanas?.length > 0 && (
+        <div style={{ borderTop: "1px solid #1e293b", paddingTop: 12 }}>
+          <p style={labelSt} className="mb-2">Por semana</p>
+          {v.semanas.map((s, i) => (
+            <div key={s.semana_iso} style={{ marginBottom: 10 }}>
+              <div className="d-flex justify-content-between align-items-center">
+                <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
+                  Sem. {i + 1}{" "}
+                  <span style={{ color: "#475569", fontSize: "0.75rem" }}>
+                    (desde{" "}
+                    {new Date(s.inicio_semana + "T00:00:00").toLocaleDateString("es-AR", {
+                      day: "2-digit", month: "2-digit",
+                    })}
+                    )
+                  </span>
+                </span>
+                <span style={{ color: "#e2e8f0", fontSize: "0.88rem", fontWeight: 600 }}>
+                  {fmt(s.total_monto)}{" "}
+                  <span style={{ color: "#64748b", fontWeight: 400, fontSize: "0.78rem" }}>
+                    ({s.total_pares} u.)
+                  </span>
+                </span>
+              </div>
+              <DesgloseSucursales sucursales={s.sucursales} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+
+export default function VendedoresStats() {
+  const [tab, setTab] = useState("semana");
+  const hoy = new Date();
+
+  const semanaHoy = getSemanaActual();
+  const [semana,     setSemana]     = useState(semanaHoy.semana);
+  const [anioSemana, setAnioSemana] = useState(semanaHoy.anio);
+  const [mes,        setMes]        = useState(hoy.getMonth() + 1);
+  const [anioMes,    setAnioMes]    = useState(hoy.getFullYear());
+
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  const cargar = useCallback(async () => {
+    if (tab === "deudas") return; // deudas tiene su propio fetch
+    setLoading(true);
+    setError("");
+    setData(null);
+    try {
+      const endpoint = tab === "semana"
+        ? { url: "/vendedores/resumen-semana", params: { semana, anio: anioSemana } }
+        : { url: "/vendedores/resumen-mes",    params: { mes,    anio: anioMes    } };
+      const { data: res } = await axios.get(endpoint.url, { params: endpoint.params });
+      setData(res);
+    } catch {
+      setError("Error al cargar los datos.");
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, semana, anioSemana, mes, anioMes]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const TABS = [
+    { key: "semana", label: "📅 Semana",  activeColor: "#3b82f6" },
+    { key: "mes",    label: "📆 Mes",     activeColor: "#3b82f6" },
+    { key: "deudas", label: "💰 Deudas",  activeColor: "#10b981" },
+  ];
+
+  return (
+    <div className="container-fluid mt-4 px-3 mb-5">
+      {/* Header */}
+      <div className="mb-4">
+        <h4 style={{ color: "#f1f5f9", fontWeight: 700, marginBottom: 4 }}>
+          Rendimiento de Vendedores
+        </h4>
+        <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>
+          Ventas semanales, mensuales y estado de deudas por vendedor.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="d-flex gap-2 mb-4 flex-wrap">
+        {TABS.map(({ key, label, activeColor }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            style={{
+              background: tab === key ? activeColor : "#111827",
+              border:     `1px solid ${tab === key ? activeColor : "#1e293b"}`,
+              color:      tab === key ? "#fff" : "#94a3b8",
+              borderRadius: 8,
+              padding: "7px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab: deudas */}
+      {tab === "deudas" && <PanelDeudas />}
+
+      {/* Tab: semana / mes — selector de período */}
+      {tab !== "deudas" && (
+        <>
+          <div style={card} className="mb-4">
+            {tab === "semana" ? (
+              <div className="d-flex align-items-center gap-4 flex-wrap">
+                <NavPeriod
+                  label="Semana"
+                  display={`Sem. ${semana} — ${anioSemana}`}
+                  onPrev={() => semana > 1 ? setSemana(semana - 1) : (setSemana(53), setAnioSemana(anioSemana - 1))}
+                  onNext={() => semana < 53 ? setSemana(semana + 1) : (setSemana(1), setAnioSemana(anioSemana + 1))}
+                />
+                {data?.inicio && (
+                  <p style={{ color: "#475569", fontSize: "0.82rem", margin: 0, alignSelf: "flex-end" }}>
+                    {new Date(data.inicio + "T00:00:00").toLocaleDateString("es-AR")}
+                    {" → "}
+                    {new Date(data.fin + "T00:00:00").toLocaleDateString("es-AR")}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <NavPeriod
+                label="Mes"
+                display={`${meses[mes]} ${anioMes}`}
+                onPrev={() => mes > 1  ? setMes(mes - 1) : (setMes(12), setAnioMes(anioMes - 1))}
+                onNext={() => mes < 12 ? setMes(mes + 1) : (setMes(1),  setAnioMes(anioMes + 1))}
+              />
+            )}
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div className="text-center py-5">
+              <div className="spinner-border text-secondary" role="status" />
+              <p style={{ color: "#64748b", marginTop: 12 }}>Cargando...</p>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !loading && (
+            <div className="alert alert-danger">{error}</div>
+          )}
+
+          {/* Resultados */}
+          {!loading && !error && data && (
+            <>
+              <div className="row g-4">
+                {data.vendedores?.length === 0 && (
+                  <div className="col-12">
+                    <p style={{ color: "#475569" }}>No hay vendedores registrados.</p>
+                  </div>
+                )}
+                {data.vendedores?.map((v) => (
+                  <div className="col-12 col-lg-6" key={v.id}>
+                    <VendedorCard v={v} tab={tab} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Totales */}
+              {data.vendedores?.length > 0 && (
+                <div className="mt-4" style={{ ...card, borderColor: "#1e40af40" }}>
+                  <p style={labelSt} className="mb-3">
+                    Total —{" "}
+                    {tab === "semana"
+                      ? `Semana ${data.semana} / ${data.anio}`
+                      : `${data.mes_nombre} ${data.anio}`}
+                  </p>
+                  <div className="d-flex gap-5 flex-wrap">
+                    <div>
+                      <p style={{ color: "#64748b", fontSize: "0.8rem", margin: 0 }}>Monto total</p>
+                      <p style={{ color: "#10b981", fontWeight: 700, fontSize: "1.4rem", margin: 0 }}>
+                        {fmt(data.vendedores.reduce((s, v) => s + v.total_monto, 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ color: "#64748b", fontSize: "0.8rem", margin: 0 }}>Unidades</p>
+                      <p style={{ color: "#f1f5f9", fontWeight: 700, fontSize: "1.4rem", margin: 0 }}>
+                        {data.vendedores.reduce((s, v) => s + v.total_pares, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

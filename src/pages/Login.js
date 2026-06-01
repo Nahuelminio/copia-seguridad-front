@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../utils/axiosInstance";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logoNorth from "../assets/logoNorth.png";
@@ -14,13 +14,7 @@ const Login = ({ onLoginSuccess }) => {
     setCargando(true);
 
     try {
-      const res = await axios.post(
-        "https://stock-north.onrender.com/auth/login",
-        {
-          email,
-          password,
-        }
-      );
+      const res = await axios.post("/auth/login", { email, password });
 
       const token = res.data.token;
       localStorage.setItem("token", token);

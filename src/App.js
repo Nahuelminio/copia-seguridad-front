@@ -37,6 +37,9 @@ import DashboardMayorista from "./pages/DashboardMayorista";
 import TransferenciasStock from "./pages/TransferenciasStock";
 import GestionSucursales from "./pages/GestionSucursales";
 import OrdenesReposicion from "./pages/OrdenesReposicion";
+import VendedorDashboard from "./pages/VendedorDashboard";
+import VendedoresStats from "./pages/VendedoresStats";
+import CostosCentral from "./pages/CostosCentral";
 
 // Componente wrapper para mostrar el Navbar solo si no está en login
 const AppLayout = ({ children }) => {
@@ -55,7 +58,9 @@ const AppLayout = ({ children }) => {
 // Wrapper para decidir qué dashboard cargar según el rol
 const DashboardWrapper = () => {
   const usuario = getUsuario();
-  return usuario?.rol === "admin" ? <AdminDashboard /> : <SucursalDashboard />;
+  if (usuario?.rol === "admin") return <AdminDashboard />;
+  if (usuario?.rol === "vendedor") return <VendedorDashboard />;
+  return <SucursalDashboard />;
 };
 
 function App() {
@@ -244,6 +249,22 @@ function App() {
             element={
               <PrivateRoute>
                 <GestionSucursales />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/vendedores/stats"
+            element={
+              <PrivateRoute>
+                <VendedoresStats />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/costos-central"
+            element={
+              <PrivateRoute>
+                <CostosCentral />
               </PrivateRoute>
             }
           />

@@ -5,6 +5,7 @@ import VentasMensuales from "../components/VentasMensuales";
 import FormularioPagoSucursal from "../components/FormularioPagoSucursal";
 import ProductoEditorMasivo from "./ProductoEditorMasivo";
 import RankingProductosModal from "../components/estadisticas/RankingProductosModal";
+import ResumenCostosCentral from "../components/ResumenCostosCentral";
 
 const cardStyle = {
   background: "#111827",
@@ -98,6 +99,16 @@ function AdminDashboard() {
           <div style={cardStyle}>
             <p style={sectionLabelStyle}>Resumen financiero por sucursal</p>
             <ResumenFinancieroSucursal recargar={recargarResumen} />
+          </div>
+        </div>
+      </div>
+
+      {/* Costos Central */}
+      <div className="row mb-4">
+        <div className="col-12">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Costos Central — mes actual</p>
+            <ResumenCostosCentral />
           </div>
         </div>
       </div>

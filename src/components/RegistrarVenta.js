@@ -11,6 +11,7 @@ function RegistrarVenta() {
   const [gustoId, setGustoId] = useState("");
 
   const [cantidad, setCantidad] = useState(1);
+  const [precioVenta, setPrecioVenta] = useState("");
 
   const [codigoBarra, setCodigoBarra] = useState("");
   const [productoDetectado, setProductoDetectado] = useState(null);
@@ -56,7 +57,8 @@ function RegistrarVenta() {
     if (token) {
       const decoded = jwtDecode(token);
       setRol(decoded.rol);
-      if (decoded.rol !== "admin" && decoded.sucursal_id) {
+      // Pre-seleccionar sucursal del token (sucursal fija para rol=sucursal, default para vendedor)
+      if (decoded.sucursal_id && decoded.rol !== "admin") {
         setSucursalId(String(decoded.sucursal_id));
       }
     }
@@ -105,7 +107,13 @@ function RegistrarVenta() {
     setHighlightIndex(-1);
     setMostrarSinStock(false);
 
-    cargarGustosDisponibles(sucursalId);
+    cargarGustosDisponibles(sucursalId).then(() => {
+      // Enfocar el input de búsqueda automáticamente al cambiar sucursal
+      setTimeout(() => {
+        inputBuscarRef.current?.focus();
+        setIsOpen(true);
+      }, 100);
+    });
   }, [sucursalId]);
 
   // =========================
@@ -144,6 +152,9 @@ function RegistrarVenta() {
         setQuery(`${data.producto_nombre} - ${data.gusto}`);
         setIsOpen(false);
         setHighlightIndex(-1);
+
+        // Pre-llenar precio si viene en la respuesta
+        if (data.precio != null) setPrecioVenta(String(data.precio));
       } catch (err) {
         if (requestId !== lastScanRequestId.current) return;
 
@@ -226,6 +237,8 @@ function RegistrarVenta() {
     setQuery(labelGusto(g));
     setIsOpen(false);
     setHighlightIndex(-1);
+    // Pre-llenar precio con el precio del stock
+    if (g.precio != null) setPrecioVenta(String(g.precio));
   };
 
   const onKeyDownBuscar = (e) => {
@@ -280,6 +293,7 @@ function RegistrarVenta() {
       gusto_id: Number(gustoId),
       sucursal_id: Number(sucursalId),
       cantidad: Number(cantidad),
+      ...(rol === "vendedor" && precioVenta !== "" ? { precio_unitario: Number(precioVenta) } : {}),
     };
 
     if (!payload.gusto_id || !payload.sucursal_id) {
@@ -305,6 +319,7 @@ function RegistrarVenta() {
       toast.success("Venta registrada correctamente");
 
       setCantidad(1);
+      setPrecioVenta("");
       setGustoId("");
       setCodigoBarra("");
       setProductoDetectado(null);
@@ -353,7 +368,7 @@ function RegistrarVenta() {
         {/* Sucursal */}
         <div className="mb-4">
           <label style={lStyle}>Sucursal</label>
-          {rol === "admin" ? (
+          {(rol === "admin" || rol === "vendedor") ? (
             <select className="form-select" style={iStyle} value={sucursalId}
               onChange={(e) => setSucursalId(e.target.value)}
               required disabled={loadingSucursales || loadingVenta}>
@@ -365,6 +380,11 @@ function RegistrarVenta() {
           ) : (
             <input type="text" className="form-control" style={{ ...iStyle, opacity: 0.6 }}
               value={sucursalNombre} disabled />
+          )}
+          {rol === "vendedor" && sucursalId && (
+            <div className="mt-1" style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+              El stock se descontará de la sucursal seleccionada.
+            </div>
           )}
         </div>
 
@@ -465,6 +485,29 @@ function RegistrarVenta() {
             </div>
           )}
         </div>
+
+        {/* Precio de venta — solo vendedores */}
+        {gustoId && rol === "vendedor" && (
+          <div className="mb-4">
+            <label style={lStyle}>Precio de venta ($)</label>
+            <input
+              type="number"
+              className="form-control input-dark"
+              style={iStyle}
+              min="0"
+              step="0.01"
+              value={precioVenta}
+              onChange={(e) => setPrecioVenta(e.target.value)}
+              placeholder="Precio por unidad"
+              disabled={formDisabled}
+            />
+            {seleccionado?.precio != null && precioVenta !== "" && Number(precioVenta) !== Number(seleccionado.precio) && (
+              <div className="mt-1" style={{ fontSize: "0.75rem", color: "#f59e0b" }}>
+                ⚠ Precio de lista: ${Number(seleccionado.precio).toLocaleString("es-AR")}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Cantidad */}
         <div className="mb-4">
