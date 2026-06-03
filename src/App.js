@@ -40,6 +40,7 @@ import OrdenesReposicion from "./pages/OrdenesReposicion";
 import VendedorDashboard from "./pages/VendedorDashboard";
 import VendedoresStats from "./pages/VendedoresStats";
 import CostosCentral from "./pages/CostosCentral";
+import PedidosCentral from "./pages/PedidosCentral";
 
 // Componente wrapper para mostrar el Navbar solo si no está en login
 const AppLayout = ({ children }) => {
@@ -265,6 +266,14 @@ function App() {
             element={
               <PrivateRoute>
                 <CostosCentral />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/pedidos-central"
+            element={
+              <PrivateRoute>
+                <PedidosCentral />
               </PrivateRoute>
             }
           />

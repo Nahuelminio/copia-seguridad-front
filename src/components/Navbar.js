@@ -133,6 +133,7 @@ function Navbar() {
                       { path: "/registrarReposicion",  label: "Cargar reposición",     onClick: cerrarMenu },
                       { path: "/historialReposiciones",label: "Historial reposiciones",onClick: cerrarMenu },
                       { path: "/costos-central",       label: "Costos Central",        onClick: cerrarMenu },
+                      { path: "/pedidos-central",      label: "Pedidos Central",       onClick: cerrarMenu },
                       { path: "/resumen-ganancias",    label: "Ganancias",             onClick: cerrarMenu },
                     ]}
                   />
