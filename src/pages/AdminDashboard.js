@@ -6,6 +6,8 @@ import FormularioPagoSucursal from "../components/FormularioPagoSucursal";
 import ProductoEditorMasivo from "./ProductoEditorMasivo";
 import RankingProductosModal from "../components/estadisticas/RankingProductosModal";
 import ResumenCostosCentral from "../components/ResumenCostosCentral";
+import KpisHoy from "../components/KpisHoy";
+import RevisionComprobantes from "../components/RevisionComprobantes";
 
 const cardStyle = {
   background: "#111827",
@@ -54,6 +56,9 @@ function AdminDashboard() {
         </p>
       </div>
 
+      {/* KPIs del día */}
+      <KpisHoy />
+
       {/* Acciones */}
       <div className="row g-3 mb-4">
         {acciones.map(({ label, onClick, accent }) => (
@@ -85,6 +90,16 @@ function AdminDashboard() {
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Comprobantes esperando aprobación */}
+      <div className="row mb-4">
+        <div className="col-12">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Comprobantes por aprobar</p>
+            <RevisionComprobantes onAprobado={manejarPagoExitoso} />
+          </div>
+        </div>
       </div>
 
       {/* Ventas + Resumen financiero */}

@@ -26,11 +26,18 @@ function ResumenFinancieroSucursal({ recargar }) {
   const [resumen, setResumen] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [sucursalNombre, setSucursalNombre] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
 
   useEffect(() => {
     setCargando(true);
+    const params = new URLSearchParams();
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
     axios
-      .get("/deuda-por-sucursal")
+      .get(`/deuda-por-sucursal${qs}`)
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : [];
         if (esAdmin) {
@@ -46,7 +53,7 @@ function ResumenFinancieroSucursal({ recargar }) {
       })
       .catch(() => setResumen([]))
       .finally(() => setCargando(false));
-  }, [recargar, esAdmin, usuario?.sucursalId]);
+  }, [recargar, desde, hasta, esAdmin, usuario?.sucursalId]);
 
   const totalFacturado = resumen.reduce((acc, s) => acc + Number(s.facturado || 0), 0);
   const totalPagado = resumen.reduce((acc, s) => acc + Number(s.pagado || 0), 0);
@@ -60,8 +67,36 @@ function ResumenFinancieroSucursal({ recargar }) {
     return <p style={{ color: "#64748b", fontSize: "0.85rem" }}>No hay datos para mostrar.</p>;
   }
 
+  const iStyle = {
+    background: "#0f172a", border: "1px solid #334155", color: "#e2e8f0",
+    borderRadius: "6px", padding: "4px 8px", fontSize: "0.8rem",
+  };
+
   return (
     <div>
+      {/* Filtro de fechas (solo admin) */}
+      {esAdmin && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <div>
+            <label style={{ color: "#64748b", fontSize: "0.7rem", display: "block", marginBottom: 3 }}>DESDE</label>
+            <input type="date" style={iStyle} value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ color: "#64748b", fontSize: "0.7rem", display: "block", marginBottom: 3 }}>HASTA</label>
+            <input type="date" style={iStyle} value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+          {(desde || hasta) && (
+            <button
+              onClick={() => { setDesde(""); setHasta(""); }}
+              style={{ background: "none", border: "1px solid #334155", color: "#94a3b8",
+                borderRadius: "6px", padding: "4px 10px", fontSize: "0.75rem", cursor: "pointer", alignSelf: "flex-end" }}
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
       {!esAdmin && sucursalNombre && (
         <p style={{ color: "#64748b", fontSize: "0.82rem", marginBottom: 12 }}>
           Sucursal:{" "}

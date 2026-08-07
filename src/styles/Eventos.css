@@ -1,0 +1,86 @@
+/* Campos de la sección Eventos. Los de Bootstrap sobre fondo oscuro quedan casi
+   invisibles: el borde se confunde con el fondo y el placeholder no se lee. */
+
+.ev-in,
+select.ev-in,
+input.ev-in {
+  background: #0d1526;
+  border: 1px solid #2b3b55;
+  color: #e8eef7;
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  appearance: none;
+}
+
+.ev-in::placeholder {
+  color: #52627a;
+}
+
+.ev-in:hover:not(:disabled) {
+  border-color: #3a4d6b;
+}
+
+.ev-in:focus,
+.ev-in:focus-visible {
+  outline: none;
+  background: #101b30;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.ev-in:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* La flecha del select desaparece al sacar el appearance nativo */
+select.ev-in {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2364748b'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+
+/* El calendario nativo es blanco sobre fondo oscuro */
+input.ev-in[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+}
+
+/* Los números no necesitan las flechitas y roban ancho */
+input.ev-in[type="number"]::-webkit-outer-spin-button,
+input.ev-in[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+input.ev-in[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Renglón de producto */
+.ev-renglon {
+  background: #0d1424;
+  border: 1px solid #1a2438;
+  border-radius: 10px;
+  padding: 12px 12px 10px;
+  margin-bottom: 8px;
+}
+
+.ev-renglon:hover {
+  border-color: #24334c;
+}
+
+.ev-hint {
+  font-size: 0.7rem;
+  color: #52627a;
+  margin-top: 4px;
+}
+
+.ev-hint.pasado {
+  color: #f87171;
+}

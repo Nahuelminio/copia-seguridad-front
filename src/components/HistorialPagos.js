@@ -83,10 +83,34 @@ export default function HistorialPagos() {
     cargarPagos();
   };
 
+  // Comprobante que se está mirando en grande
+  const [comprobante, setComprobante] = useState(null);
+  const [cargandoImg, setCargandoImg] = useState(null);
+
+  const verComprobante = async (pagoId) => {
+    setCargandoImg(pagoId);
+    try {
+      const res = await axios.get(`/pagos/${pagoId}/comprobante`);
+      setComprobante(res.data.imagen);
+    } catch {
+      alert("No se pudo cargar el comprobante");
+    } finally {
+      setCargandoImg(null);
+    }
+  };
+
   const iStyle = { background: "#111827", border: "1px solid #334155", color: "#fff", borderRadius: "8px" };
   const lStyle = { fontSize: "0.75rem", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "6px" };
 
   const totalPagos = pagos.reduce((acc, p) => acc + parseFloat(p.monto || 0), 0);
+
+  // Mismo formato que el total y que el resto del sistema: $1.250.500,00
+  const fmtMonto = (n) =>
+    "$" +
+    Number(n || 0).toLocaleString("es-AR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
   if (!filtros) return null;
 
@@ -141,7 +165,7 @@ export default function HistorialPagos() {
         <div className="d-flex justify-content-between align-items-center mb-3">
           <span className="text-white-50 small">{pagos.length} pagos encontrados</span>
           <span className="px-3 py-1 rounded small" style={{ background: "#111827", border: "1px solid #1e293b", color: "#6ee7a0", fontWeight: 600 }}>
-            Total: ${totalPagos.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            Total: {fmtMonto(totalPagos)}
           </span>
         </div>
       )}
@@ -156,7 +180,7 @@ export default function HistorialPagos() {
           <table className="table table-dark table-hover align-middle mb-0" style={{ fontSize: "0.88rem" }}>
             <thead>
               <tr style={{ color: "#64748b", borderBottom: "1px solid #1e293b" }}>
-                {["#", "Sucursal", "Método", "Monto", "Fecha"].map((h) => (
+                {["#", "Sucursal", "Método", "Origen", "Monto", "Fecha"].map((h) => (
                   <th key={h} className="fw-normal py-2 px-4"
                     style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
                 ))}
@@ -164,14 +188,28 @@ export default function HistorialPagos() {
             </thead>
             <tbody>
               {pagos.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-white-50 py-4">Sin resultados</td></tr>
+                <tr><td colSpan={6} className="text-center text-white-50 py-4">Sin resultados</td></tr>
               ) : pagos.map((pago) => (
                 <tr key={pago.id}>
                   <td className="px-4 py-2 text-white-50">{pago.id}</td>
                   <td className="px-4 py-2 text-white">{pago.sucursal}</td>
                   <td className="px-4 py-2 text-white">{pago.metodo}</td>
+                  <td className="px-4 py-2">
+                    {pago.por_comprobante ? (
+                      <button
+                        style={chipComprobante}
+                        disabled={cargandoImg === pago.id}
+                        onClick={() => verComprobante(pago.id)}
+                        title="Ver el comprobante que subió la sucursal"
+                      >
+                        {cargandoImg === pago.id ? "…" : "Comprobante"}
+                      </button>
+                    ) : (
+                      <span style={chipManual}>Manual</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 fw-semibold" style={{ color: "#6ee7a0" }}>
-                    ${parseFloat(pago.monto).toFixed(2)}
+                    {fmtMonto(pago.monto)}
                   </td>
                   <td className="px-4 py-2 text-white-50">{new Date(pago.fecha).toLocaleString()}</td>
                 </tr>
@@ -190,14 +228,79 @@ export default function HistorialPagos() {
             <div className="card-body py-2 px-3">
               <div className="d-flex justify-content-between align-items-center mb-1">
                 <span className="text-white fw-semibold small">{pago.sucursal}</span>
-                <span className="fw-bold" style={{ color: "#6ee7a0" }}>${parseFloat(pago.monto).toFixed(2)}</span>
+                <span className="fw-bold" style={{ color: "#6ee7a0" }}>{fmtMonto(pago.monto)}</span>
               </div>
-              <div className="text-white-50 small">{pago.metodo} · {new Date(pago.fecha).toLocaleString()}</div>
+              <div className="d-flex justify-content-between align-items-center gap-2">
+                <span className="text-white-50 small">
+                  {pago.metodo} · {new Date(pago.fecha).toLocaleString()}
+                </span>
+                {pago.por_comprobante ? (
+                  <button
+                    style={chipComprobante}
+                    disabled={cargandoImg === pago.id}
+                    onClick={() => verComprobante(pago.id)}
+                  >
+                    {cargandoImg === pago.id ? "…" : "Comprobante"}
+                  </button>
+                ) : (
+                  <span style={chipManual}>Manual</span>
+                )}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
+      {comprobante && (
+        <div style={overlay} onClick={() => setComprobante(null)}>
+          <img src={comprobante} alt="Comprobante" style={imgAmpliada} />
+        </div>
+      )}
     </div>
   );
 }
+
+const chipBase = {
+  borderRadius: 20,
+  padding: "2px 10px",
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  display: "inline-block",
+};
+
+// Cargado por la sucursal desde una foto: se puede tocar para ver la imagen
+const chipComprobante = {
+  ...chipBase,
+  background: "rgba(59,130,246,0.15)",
+  border: "1px solid rgba(59,130,246,0.45)",
+  color: "#93c5fd",
+  cursor: "pointer",
+};
+
+// Registrado a mano desde el panel de administración
+const chipManual = {
+  ...chipBase,
+  background: "rgba(148,163,184,0.12)",
+  border: "1px solid rgba(148,163,184,0.3)",
+  color: "#94a3b8",
+};
+
+const overlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.88)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+  cursor: "zoom-out",
+};
+
+const imgAmpliada = {
+  maxWidth: "100%",
+  maxHeight: "100%",
+  objectFit: "contain",
+  borderRadius: 8,
+};

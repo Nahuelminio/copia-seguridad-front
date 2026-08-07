@@ -514,16 +514,22 @@ function FormNuevaTransferencia({ sucursales, onGuardada, onCancelar }) {
   }, []);
 
   const productosFiltrados = useMemo(() => {
-    if (!queryProducto.trim()) return [];
     const q = normalizar(queryProducto);
-    return productos
-      .filter(
-        (p) =>
-          normalizar(p.producto_nombre).includes(q) ||
-          normalizar(p.gusto).includes(q) ||
-          (p.codigo_barra && p.codigo_barra.includes(q))
-      )
-      .slice(0, 20);
+    const base = q
+      ? productos.filter(
+          (p) =>
+            normalizar(p.producto_nombre).includes(q) ||
+            normalizar(p.gusto).includes(q) ||
+            (p.codigo_barra && p.codigo_barra.includes(q))
+        )
+      : [...productos];
+    // Con stock primero, luego por nombre
+    return base
+      .sort((a, b) => {
+        if ((b.stock > 0) !== (a.stock > 0)) return b.stock > 0 ? 1 : -1;
+        return normalizar(a.producto_nombre).localeCompare(normalizar(b.producto_nombre));
+      })
+      .slice(0, 30);
   }, [queryProducto, productos]);
 
   const seleccionarProducto = (p) => {
@@ -868,6 +874,8 @@ export default function TransferenciasStock() {
   const [sucursales, setSucursales] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroOrigen, setFiltroOrigen] = useState("");
+  const [filtroDestino, setFiltroDestino] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [cancelandoId, setCancelandoId] = useState(null);
@@ -951,7 +959,7 @@ export default function TransferenciasStock() {
       </div>
 
       {/* Filtros */}
-      <div className="d-flex gap-2 mb-3 flex-wrap">
+      <div className="d-flex gap-2 mb-3 flex-wrap align-items-center">
         {["", "pendiente", "confirmada", "cancelada"].map((e) => (
           <button
             key={e}
@@ -961,34 +969,64 @@ export default function TransferenciasStock() {
             {e === "" ? "Todos" : e.charAt(0).toUpperCase() + e.slice(1)}
           </button>
         ))}
+        <select
+          className="form-select form-select-sm ms-2"
+          style={{ ...selectDark, width: "auto", minWidth: 140 }}
+          value={filtroOrigen}
+          onChange={(e) => setFiltroOrigen(e.target.value)}
+        >
+          <option value="" style={optionDark}>Origen: todos</option>
+          {sucursales.map((s) => <option key={s.id} value={s.nombre} style={optionDark}>{s.nombre}</option>)}
+        </select>
+        <select
+          className="form-select form-select-sm"
+          style={{ ...selectDark, width: "auto", minWidth: 140 }}
+          value={filtroDestino}
+          onChange={(e) => setFiltroDestino(e.target.value)}
+        >
+          <option value="" style={optionDark}>Destino: todos</option>
+          {sucursales.map((s) => <option key={s.id} value={s.nombre} style={optionDark}>{s.nombre}</option>)}
+        </select>
+        {(filtroOrigen || filtroDestino) && (
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => { setFiltroOrigen(""); setFiltroDestino(""); }}
+          >
+            Limpiar
+          </button>
+        )}
       </div>
 
       {/* Tabla */}
-      {cargando ? (
-        <p className="text-muted text-center mt-5">Cargando…</p>
-      ) : transferencias.length === 0 ? (
-        <div
-          className="text-center py-5"
-          style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}
-        >
-          <div style={{ fontSize: "2rem", marginBottom: 8 }}>📦</div>
-          <div>No hay transferencias{filtroEstado ? ` con estado "${filtroEstado}"` : ""}</div>
-        </div>
-      ) : (
-        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-          <table className="table table-dark table-hover align-middle mb-0" style={{ background: "transparent" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                <th style={thStyle}>#</th>
-                <th style={thStyle}>Movimiento</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Productos</th>
-                <th style={thStyle}>Fecha creación</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Estado</th>
-                <th style={thStyle}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {transferencias.map((t) => (
+      {(() => {
+        const filas = transferencias.filter((t) =>
+          (!filtroOrigen  || t.sucursal_origen  === filtroOrigen) &&
+          (!filtroDestino || t.sucursal_destino === filtroDestino)
+        );
+        return cargando ? (
+          <p className="text-muted text-center mt-5">Cargando…</p>
+        ) : filas.length === 0 ? (
+          <div
+            className="text-center py-5"
+            style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}
+          >
+            <div>No hay transferencias{filtroEstado ? ` con estado "${filtroEstado}"` : ""}</div>
+          </div>
+        ) : (
+          <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <table className="table table-dark table-hover align-middle mb-0" style={{ background: "transparent" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <th style={thStyle}>#</th>
+                  <th style={thStyle}>Movimiento</th>
+                  <th style={{ ...thStyle, textAlign: "center" }}>Productos</th>
+                  <th style={thStyle}>Fecha creación</th>
+                  <th style={{ ...thStyle, textAlign: "center" }}>Estado</th>
+                  <th style={thStyle}></th>
+                </tr>
+              </thead>
+              <tbody>
+              {filas.map((t) => (
                 <tr key={t.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   {/* ID */}
                   <td style={{ paddingLeft: 16, color: "#94a3b8", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
@@ -1004,7 +1042,7 @@ export default function TransferenciasStock() {
                     </div>
                   </td>
 
-                  {/* Cantidad de ítems */}
+                  {/* Cantidad de ítems y unidades */}
                   <td className="text-center">
                     <span style={{
                       background: "rgba(255,255,255,0.12)",
@@ -1016,6 +1054,11 @@ export default function TransferenciasStock() {
                     }}>
                       {t.total_items} ítem{t.total_items !== 1 ? "s" : ""}
                     </span>
+                    {t.total_unidades > 0 && (
+                      <div style={{ color: "#94a3b8", fontSize: "0.73rem", marginTop: 2 }}>
+                        {t.total_unidades} u.
+                      </div>
+                    )}
                   </td>
 
                   {/* Fecha */}
@@ -1059,10 +1102,11 @@ export default function TransferenciasStock() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       {/* Paginación */}
       {totalPages > 1 && (

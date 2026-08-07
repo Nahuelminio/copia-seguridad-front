@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import Loader from "../components/Loader";
 import { jwtDecode } from "jwt-decode";
 
@@ -12,7 +13,10 @@ function HistorialVentas() {
   const [ventas, setVentas] = useState([]);
   const [sucursales, setSucursales] = useState([]);
   const [sucursalId, setSucursalId] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [cargando, setCargando] = useState(true);
+  const [exportando, setExportando] = useState(false);
   const [nombreSucursal, setNombreSucursal] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -30,7 +34,7 @@ function HistorialVentas() {
     if (esSucursal && sucursalUsuario) setSucursalId(sucursalUsuario);
   }, [esSucursal, sucursalUsuario]);
 
-  useEffect(() => { setPage(1); }, [sucursalId]);
+  useEffect(() => { setPage(1); }, [sucursalId, desde, hasta]);
 
   useEffect(() => {
     if (esAdmin) {
@@ -44,6 +48,8 @@ function HistorialVentas() {
     setCargando(true);
     const params = new URLSearchParams({ page, limit: LIMIT });
     if (sucursalId) params.set("sucursal_id", sucursalId);
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
 
     axios.get(`${API}/historial?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
@@ -55,7 +61,49 @@ function HistorialVentas() {
       })
       .catch(() => alert("Error al obtener historial de ventas"))
       .finally(() => setCargando(false));
-  }, [API, sucursalId, esSucursal, token, page]);
+  }, [API, sucursalId, desde, hasta, esSucursal, token, page]);
+
+  const exportarExcel = async () => {
+    setExportando(true);
+    try {
+      const params = new URLSearchParams();
+      if (sucursalId) params.set("sucursal_id", sucursalId);
+      if (desde) params.set("desde", desde);
+      if (hasta) params.set("hasta", hasta);
+
+      const res = await axios.get(`${API}/historial-export?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } });
+
+      const datos = res.data.map((v) => ({
+        "ID": v.id,
+        "Fecha": v.fecha,
+        "Hora": v.hora,
+        "Sucursal": v.sucursal,
+        "Producto": v.producto,
+        "Gusto": v.gusto,
+        "Cantidad": Number(v.cantidad),
+        "Precio Unitario": Number(v.precio_unitario),
+        "Total Venta": Number(v.total),
+        "Costo Unitario": Number(v.costo_unitario),
+        "Costo Total": Number(v.costo_total),
+        "Ganancia": Number(v.ganancia),
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(datos);
+      ws["!cols"] = [
+        { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 22 },
+        { wch: 22 }, { wch: 8 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Historial Ventas");
+      const nombre = `historial_ventas${desde ? `_${desde}` : ""}${hasta ? `_al_${hasta}` : ""}.xlsx`;
+      XLSX.writeFile(wb, nombre);
+    } catch {
+      alert("Error al exportar");
+    } finally {
+      setExportando(false);
+    }
+  };
 
   const totalFacturado = ventas.reduce((acc, v) => acc + Number(v.precio || 0) * v.cantidad, 0);
 
@@ -70,11 +118,11 @@ function HistorialVentas() {
         )}
       </div>
 
-      {/* Filtro sucursal (admin) */}
+      {/* Filtros */}
       {esAdmin && (
-        <div className="d-flex flex-wrap gap-3 mb-4">
-          <div style={{ minWidth: "200px", maxWidth: "280px" }}>
-            <label style={lStyle}>Filtrar por sucursal</label>
+        <div className="d-flex flex-wrap gap-3 mb-4 align-items-end">
+          <div style={{ minWidth: "200px", maxWidth: "260px" }}>
+            <label style={lStyle}>Sucursal</label>
             <select className="form-select" style={iStyle} value={sucursalId}
               onChange={(e) => setSucursalId(e.target.value)}>
               <option value="">Todas</option>
@@ -82,6 +130,28 @@ function HistorialVentas() {
                 <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
+          </div>
+          <div style={{ minWidth: "150px" }}>
+            <label style={lStyle}>Desde</label>
+            <input type="date" className="form-control" style={iStyle}
+              value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <div style={{ minWidth: "150px" }}>
+            <label style={lStyle}>Hasta</label>
+            <input type="date" className="form-control" style={iStyle}
+              value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ ...lStyle, opacity: 0 }}>x</label>
+            <button
+              className="btn btn-sm d-block"
+              style={{ background: "#10b981", color: "#fff", border: "none", borderRadius: "8px",
+                padding: "8px 18px", fontWeight: 600, opacity: exportando ? 0.7 : 1 }}
+              onClick={exportarExcel}
+              disabled={exportando}
+            >
+              {exportando ? "Exportando…" : "⬇ Exportar Excel"}
+            </button>
           </div>
         </div>
       )}

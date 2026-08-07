@@ -110,6 +110,7 @@ function PanelDeudas() {
   const [notas, setNotas]         = useState("");
   const [guardando, setGuardando] = useState(false);
   const [historial, setHistorial] = useState(null);   // { id, rows }
+  const [eliminando, setEliminando] = useState(null);
 
   const cargarDeudas = useCallback(async () => {
     setLoading(true);
@@ -158,6 +159,22 @@ function PanelDeudas() {
       setHistorial({ id: v.id, rows: data });
     } catch {
       toast.error("Error al cargar historial");
+    }
+  };
+
+  const eliminarPago = async (pagoId) => {
+    setEliminando(pagoId);
+    try {
+      await axios.delete(`/vendedores/pagos/${pagoId}`);
+      toast.success("Pago eliminado");
+      const vendedorId = historial.id;
+      const { data } = await axios.get(`/vendedores/${vendedorId}/pagos`);
+      setHistorial({ id: vendedorId, rows: data });
+      cargarDeudas();
+    } catch (e) {
+      toast.error(e.response?.data?.error || "Error al eliminar");
+    } finally {
+      setEliminando(null);
     }
   };
 
@@ -218,7 +235,7 @@ function PanelDeudas() {
                       {fmt(v.total_pagado)}
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, color: deudaColor }}>
-                      {fmt(v.deuda)}{v.deuda <= 0 && " ✅"}
+                      {fmt(v.deuda)}{v.deuda <= 0 && " (al día)"}
                     </td>
                     <td style={{ padding: "10px 16px", textAlign: "center" }}>
                       <div className="d-flex gap-2 justify-content-center">
@@ -264,6 +281,7 @@ function PanelDeudas() {
                                 <th style={{ padding: "4px 8px 6px", fontWeight: 600 }}>Método</th>
                                 <th style={{ padding: "4px 8px 6px", fontWeight: 600, textAlign: "right" }}>Monto</th>
                                 <th style={{ padding: "4px 8px 6px", fontWeight: 600 }}>Notas</th>
+                                <th style={{ padding: "4px 8px 6px" }}></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -281,6 +299,20 @@ function PanelDeudas() {
                                     {fmt(p.monto)}
                                   </td>
                                   <td style={{ padding: "4px 8px", color: "#475569" }}>{p.notas || "—"}</td>
+                                  <td style={{ padding: "4px 8px" }}>
+                                    <button
+                                      onClick={() => eliminarPago(p.id)}
+                                      disabled={eliminando === p.id}
+                                      style={{
+                                        background: "#3f0000", border: "1px solid #7f1d1d",
+                                        color: "#f87171", borderRadius: 5,
+                                        padding: "2px 8px", fontSize: "0.72rem",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      {eliminando === p.id ? "..." : "Eliminar"}
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -478,6 +510,306 @@ function VendedorCard({ v, tab }) {
   );
 }
 
+// ─── Panel Detalle ────────────────────────────────────────────────────────────
+
+function PanelDetalle({ semana, anioSemana, mes, anioMes, setSemana, setAnioSemana, setMes, setAnioMes }) {
+  const [modo,    setModo]    = useState("dias"); // "dias" | "semana" | "mes"
+  const [dias,    setDias]    = useState(3);
+  const [ventas,  setVentas]  = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [editando, setEditando] = useState(null); // { id, cantidad, precio_unitario }
+  const [guardando, setGuardando] = useState(false);
+  const [filtroVendedor, setFiltroVendedor] = useState("todos");
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setVentas(null);
+    try {
+      let params;
+      if (modo === "dias") {
+        const hasta = new Date();
+        const desde = new Date();
+        desde.setDate(desde.getDate() - (dias - 1));
+        params = {
+          desde: desde.toISOString().slice(0, 10),
+          hasta: hasta.toISOString().slice(0, 10),
+        };
+      } else if (modo === "semana") {
+        params = { semana, anio: anioSemana };
+      } else {
+        params = { mes, anio: anioMes };
+      }
+      const { data } = await axios.get("/vendedores/ventas/detalle", { params });
+      setVentas(data);
+    } catch {
+      toast.error("Error al cargar detalle");
+    } finally {
+      setLoading(false);
+    }
+  }, [modo, dias, semana, anioSemana, mes, anioMes]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const abrirEdit = (v) => setEditando({ id: v.id, cantidad: v.cantidad, precio_unitario: v.precio_unitario });
+  const cerrarEdit = () => setEditando(null);
+
+  const guardarEdit = async () => {
+    if (!editando) return;
+    const cant = Number(editando.cantidad);
+    const precio = Number(editando.precio_unitario);
+    if (!cant || cant <= 0) { toast.error("Cantidad inválida"); return; }
+    if (precio < 0) { toast.error("Precio inválido"); return; }
+    setGuardando(true);
+    try {
+      await axios.put(`/vendedores/ventas/${editando.id}`, { cantidad: cant, precio_unitario: precio });
+      toast.success("Venta actualizada");
+      cerrarEdit();
+      cargar();
+    } catch (e) {
+      toast.error(e.response?.data?.error || "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // Vendedores únicos para el filtro
+  const vendedores = ventas
+    ? [...new Map(ventas.map(v => [v.vendedor_id, v.vendedor_email])).entries()]
+    : [];
+
+  const ventasFiltradas = ventas
+    ? (filtroVendedor === "todos" ? ventas : ventas.filter(v => String(v.vendedor_id) === filtroVendedor))
+    : [];
+
+  // Totales del filtro actual
+  const totalUnidades = ventasFiltradas.reduce((s, v) => s + v.cantidad, 0);
+  const totalMonto    = ventasFiltradas.reduce((s, v) => s + Number(v.total), 0);
+
+  return (
+    <div>
+      {/* Selector modo + período */}
+      <div style={{ ...card, marginBottom: 16 }}>
+        <div className="d-flex align-items-center gap-3 flex-wrap">
+          <div className="d-flex gap-2 flex-wrap">
+            {[
+              { key: "dias",   label: "Últimos días" },
+              { key: "semana", label: "Semana" },
+              { key: "mes",    label: "Mes" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setModo(key)}
+                style={{
+                  background: modo === key ? "#8b5cf6" : "#0f172a",
+                  border: `1px solid ${modo === key ? "#8b5cf6" : "#1e293b"}`,
+                  color: modo === key ? "#fff" : "#94a3b8",
+                  borderRadius: 7, padding: "5px 16px",
+                  fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {modo === "dias" && (
+            <div className="d-flex align-items-center gap-2">
+              <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Últimos</span>
+              {[1, 3, 7, 14, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setDias(d)}
+                  style={{
+                    background: dias === d ? "#6d28d9" : "#0f172a",
+                    border: `1px solid ${dias === d ? "#8b5cf6" : "#1e293b"}`,
+                    color: dias === d ? "#fff" : "#64748b",
+                    borderRadius: 6, padding: "3px 12px",
+                    fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          )}
+
+          {modo === "semana" && (
+            <NavPeriod
+              label="Semana"
+              display={`Sem. ${semana} — ${anioSemana}`}
+              onPrev={() => semana > 1  ? setSemana(semana - 1) : (setSemana(53), setAnioSemana(anioSemana - 1))}
+              onNext={() => semana < 53 ? setSemana(semana + 1) : (setSemana(1),  setAnioSemana(anioSemana + 1))}
+            />
+          )}
+
+          {modo === "mes" && (
+            <NavPeriod
+              label="Mes"
+              display={`${meses[mes]} ${anioMes}`}
+              onPrev={() => mes > 1  ? setMes(mes - 1) : (setMes(12), setAnioMes(anioMes - 1))}
+              onNext={() => mes < 12 ? setMes(mes + 1) : (setMes(1),  setAnioMes(anioMes + 1))}
+            />
+          )}
+
+          {/* Filtro vendedor */}
+          {vendedores.length > 0 && (
+            <div style={{ marginLeft: "auto" }}>
+              <select
+                className="form-select form-select-sm"
+                style={{ ...inputSt, minWidth: 160, fontSize: "0.82rem" }}
+                value={filtroVendedor}
+                onChange={e => setFiltroVendedor(e.target.value)}
+              >
+                <option value="todos">Todos los vendedores</option>
+                {vendedores.map(([id, email]) => (
+                  <option key={id} value={String(id)}>{username(email)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* KPIs */}
+      {ventas && (
+        <div className="row g-3 mb-3">
+          {[
+            { label: "Ventas",    value: ventasFiltradas.length,    color: "#8b5cf6" },
+            { label: "Unidades",  value: totalUnidades,             color: "#f1f5f9" },
+            { label: "Total",     value: fmt(totalMonto),           color: "#10b981" },
+          ].map(({ label, value, color }) => (
+            <div className="col-4" key={label}>
+              <div style={{ ...card, padding: "12px 16px", borderColor: `${color}30` }}>
+                <p style={{ ...labelSt, marginBottom: 3 }}>{label}</p>
+                <p style={{ color, fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-5">
+          <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+        </div>
+      )}
+
+      {/* Tabla */}
+      {!loading && ventas && (
+        <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+          {ventasFiltradas.length === 0 ? (
+            <p style={{ color: "#475569", padding: 20, margin: 0 }}>Sin ventas en este período.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table className="table table-dark mb-0" style={{ fontSize: "0.82rem", minWidth: 640 }}>
+                <thead>
+                  <tr style={{ borderColor: "#1e293b", color: "#64748b", fontSize: "0.7rem", textTransform: "uppercase" }}>
+                    <th style={{ padding: "10px 14px" }}>Fecha</th>
+                    <th style={{ padding: "10px 14px" }}>Vendedor</th>
+                    <th style={{ padding: "10px 14px" }}>Producto</th>
+                    <th style={{ padding: "10px 14px" }}>Sabor</th>
+                    <th style={{ padding: "10px 14px", textAlign: "right" }}>Cant.</th>
+                    <th style={{ padding: "10px 14px", textAlign: "right" }}>Precio u.</th>
+                    <th style={{ padding: "10px 14px", textAlign: "right" }}>Total</th>
+                    <th style={{ padding: "10px 14px", width: 70 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ventasFiltradas.map(v => {
+                    const enEdit = editando?.id === v.id;
+                    return (
+                      <tr key={v.id} style={{ borderColor: "#1e293b", background: enEdit ? "#0f1e36" : undefined }}>
+                        <td style={{ padding: "9px 14px", color: "#64748b", whiteSpace: "nowrap" }}>
+                          {new Date(v.fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}
+                        </td>
+                        <td style={{ padding: "9px 14px", color: "#94a3b8", fontWeight: 600 }}>
+                          {username(v.vendedor_email)}
+                        </td>
+                        <td style={{ padding: "9px 14px", color: "#e2e8f0" }}>{v.producto}</td>
+                        <td style={{ padding: "9px 14px", color: "#a78bfa" }}>{v.sabor}</td>
+                        <td style={{ padding: "9px 14px", textAlign: "right" }}>
+                          {enEdit ? (
+                            <input
+                              type="number" min="1"
+                              value={editando.cantidad}
+                              onChange={e => setEditando({ ...editando, cantidad: e.target.value })}
+                              style={{ ...inputSt, width: 60, textAlign: "right", padding: "2px 6px", fontSize: "0.82rem" }}
+                            />
+                          ) : (
+                            <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{v.cantidad}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: "9px 14px", textAlign: "right" }}>
+                          {enEdit ? (
+                            <input
+                              type="number" min="0"
+                              value={editando.precio_unitario}
+                              onChange={e => setEditando({ ...editando, precio_unitario: e.target.value })}
+                              style={{ ...inputSt, width: 90, textAlign: "right", padding: "2px 6px", fontSize: "0.82rem" }}
+                            />
+                          ) : (
+                            <span style={{ color: "#94a3b8" }}>{fmt(v.precio_unitario)}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: "9px 14px", textAlign: "right", color: "#10b981", fontWeight: 600 }}>
+                          {enEdit
+                            ? fmt(Number(editando.cantidad) * Number(editando.precio_unitario))
+                            : fmt(v.total)}
+                        </td>
+                        <td style={{ padding: "9px 14px" }}>
+                          {enEdit ? (
+                            <div className="d-flex gap-1">
+                              <button
+                                onClick={guardarEdit}
+                                disabled={guardando}
+                                style={{
+                                  background: "#10b981", border: "none", color: "#fff",
+                                  borderRadius: 5, padding: "3px 8px", fontSize: "0.72rem",
+                                  fontWeight: 700, cursor: "pointer",
+                                }}
+                              >
+                                {guardando ? "..." : "OK"}
+                              </button>
+                              <button
+                                onClick={cerrarEdit}
+                                style={{
+                                  background: "transparent", border: "1px solid #334155",
+                                  color: "#64748b", borderRadius: 5,
+                                  padding: "3px 6px", fontSize: "0.72rem", cursor: "pointer",
+                                }}
+                              >
+                                X
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => abrirEdit(v)}
+                              style={{
+                                background: "#1e293b", border: "1px solid #334155",
+                                color: "#94a3b8", borderRadius: 5,
+                                padding: "3px 10px", fontSize: "0.72rem", cursor: "pointer",
+                              }}
+                            >
+                              Editar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal edición: no hay modal, todo es inline */}
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function VendedoresStats() {
@@ -515,9 +847,10 @@ export default function VendedoresStats() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const TABS = [
-    { key: "semana", label: "📅 Semana",  activeColor: "#3b82f6" },
-    { key: "mes",    label: "📆 Mes",     activeColor: "#3b82f6" },
-    { key: "deudas", label: "💰 Deudas",  activeColor: "#10b981" },
+    { key: "semana",  label: "Semana",  activeColor: "#3b82f6" },
+    { key: "mes",     label: "Mes",     activeColor: "#3b82f6" },
+    { key: "deudas",  label: "Deudas",  activeColor: "#10b981" },
+    { key: "detalle", label: "Detalle", activeColor: "#8b5cf6" },
   ];
 
   return (
@@ -557,6 +890,16 @@ export default function VendedoresStats() {
 
       {/* Tab: deudas */}
       {tab === "deudas" && <PanelDeudas />}
+
+      {/* Tab: detalle */}
+      {tab === "detalle" && (
+        <PanelDetalle
+          semana={semana} anioSemana={anioSemana}
+          mes={mes} anioMes={anioMes}
+          setSemana={setSemana} setAnioSemana={setAnioSemana}
+          setMes={setMes} setAnioMes={setAnioMes}
+        />
+      )}
 
       {/* Tab: semana / mes — selector de período */}
       {tab !== "deudas" && (

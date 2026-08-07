@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "../utils/axiosInstance";
+import * as XLSX from "xlsx";
 
 export default function ResumenGanancias() {
   const [datos, setDatos] = useState([]);
@@ -44,6 +45,36 @@ export default function ResumenGanancias() {
       minimumFractionDigits: 2,
     }).format(valor);
 
+  const exportarExcel = () => {
+    const datos = datos_export.map((f) => {
+      const margen = f.total_ventas ? (f.ganancia / f.total_ventas) * 100 : 0;
+      return {
+        "Sucursal": f.sucursal,
+        "Ventas Regulares": Number(f.ventas_regulares),
+        "Ventas Mayorista": Number(f.ventas_mayorista),
+        "Total Ventas": Number(f.total_ventas),
+        "Costo Total": Number(f.costo_total),
+        "Ganancia": Number(f.ganancia),
+        "Margen %": Math.round(margen * 10) / 10,
+        "Período": mes && anio ? `${mes}/${anio}` : "Todo",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(datos);
+    ws["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Ganancias");
+    const nombre = `ganancias${mes && anio ? `_${anio}_${String(mes).padStart(2,"0")}` : "_total"}.xlsx`;
+    XLSX.writeFile(wb, nombre);
+  };
+
+  // alias para usar en exportarExcel sin closure issue
+  const datos_export = datos;
+
+  const totalVentas     = datos.reduce((acc, f) => acc + Number(f.total_ventas     || 0), 0);
+  const totalMayorista  = datos.reduce((acc, f) => acc + Number(f.ventas_mayorista  || 0), 0);
+  const totalCostos     = datos.reduce((acc, f) => acc + Number(f.costo_total       || 0), 0);
+  const totalGanancia   = datos.reduce((acc, f) => acc + Number(f.ganancia          || 0), 0);
+
   return (
     <div className="container-fluid mt-4 px-2">
       <h2 className="text-center mb-4">Resumen de Ganancias por Sucursal</h2>
@@ -84,12 +115,15 @@ export default function ResumenGanancias() {
         <p className="text-center">No hay datos disponibles.</p>
       ) : (
         <>
-          <div className="mx-auto" style={{ maxWidth: "950px" }}>
-            <div className="table-responsive-md d-none d-md-block">
+          {/* Tabla desktop */}
+          <div className="mx-auto" style={{ maxWidth: "1100px" }}>
+            <div className="table-responsive d-none d-md-block">
               <table className="table table-bordered mt-3 mb-0">
                 <thead className="table-dark">
                   <tr>
                     <th>Sucursal</th>
+                    <th>Ventas Regulares 🏪</th>
+                    <th>Ventas Mayorista 📦</th>
                     <th>Total Ventas 💰</th>
                     <th>Costo Total 💸</th>
                     <th>Ganancia 🤑</th>
@@ -104,10 +138,24 @@ export default function ResumenGanancias() {
                     return (
                       <tr key={i}>
                         <td>{fila.sucursal}</td>
-                        <td>{formatoMoneda(fila.total_ventas)}</td>
+                        <td>{formatoMoneda(fila.ventas_regulares)}</td>
+                        <td>
+                          {Number(fila.ventas_mayorista) > 0 ? (
+                            <span className="badge bg-info text-dark">
+                              {formatoMoneda(fila.ventas_mayorista)}
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
+                        <td><strong>{formatoMoneda(fila.total_ventas)}</strong></td>
                         <td>{formatoMoneda(fila.costo_total)}</td>
-                        <td>{formatoMoneda(fila.ganancia)}</td>
-                        <td>{margen.toFixed(2)}%</td>
+                        <td>
+                          <strong style={{ color: fila.ganancia >= 0 ? "#198754" : "#dc3545" }}>
+                            {formatoMoneda(fila.ganancia)}
+                          </strong>
+                        </td>
+                        <td>{margen.toFixed(1)}%</td>
                       </tr>
                     );
                   })}
@@ -116,41 +164,29 @@ export default function ResumenGanancias() {
             </div>
 
             {/* Totales generales */}
-            <div className="row row-cols-1 row-cols-sm-3 g-2 mt-4">
+            <div className="row row-cols-2 row-cols-sm-4 g-2 mt-4">
               <div className="col">
-                <div className="alert alert-secondary text-center mb-0">
-                  🧾 Total Ventas:{" "}
-                  <strong>
-                    {formatoMoneda(
-                      datos.reduce(
-                        (acc, f) => acc + Number(f.total_ventas || 0),
-                        0
-                      )
-                    )}
-                  </strong>
+                <div className="alert alert-secondary text-center mb-0 p-2">
+                  <small className="d-block text-muted">Ventas Regulares</small>
+                  <strong>{formatoMoneda(totalVentas - totalMayorista)}</strong>
                 </div>
               </div>
               <div className="col">
-                <div className="alert alert-secondary text-center mb-0">
-                  💸 Total Costos:{" "}
-                  <strong>
-                    {formatoMoneda(
-                      datos.reduce(
-                        (acc, f) => acc + Number(f.costo_total || 0),
-                        0
-                      )
-                    )}
-                  </strong>
+                <div className="alert alert-info text-center mb-0 p-2">
+                  <small className="d-block text-muted">Ventas Mayorista</small>
+                  <strong>{formatoMoneda(totalMayorista)}</strong>
                 </div>
               </div>
               <div className="col">
-                <div className="alert alert-secondary text-center mb-0">
-                  🧮 Ganancia Total:{" "}
-                  <strong>
-                    {formatoMoneda(
-                      datos.reduce((acc, f) => acc + Number(f.ganancia || 0), 0)
-                    )}
-                  </strong>
+                <div className="alert alert-secondary text-center mb-0 p-2">
+                  <small className="d-block text-muted">Total Costos</small>
+                  <strong>{formatoMoneda(totalCostos)}</strong>
+                </div>
+              </div>
+              <div className="col">
+                <div className="alert alert-success text-center mb-0 p-2">
+                  <small className="d-block text-muted">Ganancia Total</small>
+                  <strong>{formatoMoneda(totalGanancia)}</strong>
                 </div>
               </div>
             </div>
@@ -158,7 +194,7 @@ export default function ResumenGanancias() {
 
           {/* Cards móviles */}
           <div className="d-md-none">
-            <div className="row g-3 mt-4">
+            <div className="row g-3 mt-2">
               {datos.map((fila, i) => {
                 const margen = fila.total_ventas
                   ? (fila.ganancia / fila.total_ventas) * 100
@@ -167,9 +203,21 @@ export default function ResumenGanancias() {
                   <div key={i} className="col-12">
                     <div className="card shadow-sm">
                       <div className="card-body p-3">
-                        <h5 className="card-title">{fila.sucursal}</h5>
+                        <h5 className="card-title mb-2">{fila.sucursal}</h5>
                         <p className="mb-1">
-                          <strong>Ventas:</strong>{" "}
+                          <strong>Ventas regulares:</strong>{" "}
+                          {formatoMoneda(fila.ventas_regulares)}
+                        </p>
+                        {Number(fila.ventas_mayorista) > 0 && (
+                          <p className="mb-1">
+                            <strong>Ventas mayorista:</strong>{" "}
+                            <span className="badge bg-info text-dark">
+                              {formatoMoneda(fila.ventas_mayorista)}
+                            </span>
+                          </p>
+                        )}
+                        <p className="mb-1">
+                          <strong>Total ventas:</strong>{" "}
                           {formatoMoneda(fila.total_ventas)}
                         </p>
                         <p className="mb-1">
@@ -178,10 +226,12 @@ export default function ResumenGanancias() {
                         </p>
                         <p className="mb-1">
                           <strong>Ganancia:</strong>{" "}
-                          {formatoMoneda(fila.ganancia)}
+                          <span style={{ color: fila.ganancia >= 0 ? "#198754" : "#dc3545", fontWeight: 700 }}>
+                            {formatoMoneda(fila.ganancia)}
+                          </span>
                         </p>
                         <p className="mb-0">
-                          <strong>Margen:</strong> {margen.toFixed(2)}%
+                          <strong>Margen:</strong> {margen.toFixed(1)}%
                         </p>
                       </div>
                     </div>
@@ -193,14 +243,20 @@ export default function ResumenGanancias() {
         </>
       )}
 
-      {/* Botón actualizar manual */}
-      <div className="d-flex justify-content-center">
-        <button
-          className="btn button-filtros mt-4 w-50 sm-auto"
-          onClick={obtenerResumen}
-        >
+      {/* Botones */}
+      <div className="d-flex justify-content-center gap-3 mt-4">
+        <button className="btn button-filtros w-25" onClick={obtenerResumen}>
           Actualizar
         </button>
+        {datos.length > 0 && (
+          <button
+            className="btn w-25"
+            style={{ background: "#10b981", color: "#fff", border: "none", fontWeight: 600, borderRadius: "8px" }}
+            onClick={exportarExcel}
+          >
+            ⬇ Exportar Excel
+          </button>
+        )}
       </div>
     </div>
   );

@@ -9,14 +9,6 @@ const card = {
   padding: "20px 24px",
 };
 
-const labelSt = {
-  color: "#64748b",
-  fontSize: "0.72rem",
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-};
-
 const fmt = (n) =>
   Number(n || 0).toLocaleString("es-AR", {
     style: "currency", currency: "ARS", maximumFractionDigits: 0,
@@ -206,6 +198,21 @@ export default function PedidosCentral() {
                     #{pedido.id}
                   </span>
                   <EstadoBadge estado={pedido.estado} />
+                  {pedido.nombre_cliente && (
+                    <span style={{ color: "#e2e8f0", fontSize: "0.82rem", fontWeight: 600 }}>
+                      👤 {pedido.nombre_cliente}
+                    </span>
+                  )}
+                  {pedido.telefono_cliente && (
+                    <a
+                      href={`https://wa.me/${String(pedido.telefono_cliente).replace(/[^\d]/g, "")}`}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: "#25d366", fontSize: "0.8rem", textDecoration: "none" }}
+                    >
+                      💬 {pedido.telefono_cliente}
+                    </a>
+                  )}
                   <span style={{ color: "#64748b", fontSize: "0.8rem" }}>
                     {formatFecha(pedido.fecha_creacion)}
                   </span>
@@ -288,6 +295,41 @@ export default function PedidosCentral() {
                       )}
                     </table>
                   </div>
+
+                  {/* Pago y envío */}
+                  {(pedido.metodo_pago || pedido.direccion) && (
+                    <div style={{ padding: "12px 20px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+                      {pedido.metodo_pago && (
+                        <span style={{ fontSize: "0.82rem" }}>
+                          <span style={{ color: "#64748b" }}>💳 Pago: </span>
+                          <span style={{
+                            color: pedido.metodo_pago === "transferencia" ? "#38bdf8" : "#10b981",
+                            fontWeight: 700, textTransform: "capitalize",
+                          }}>
+                            {pedido.metodo_pago}
+                          </span>
+                        </span>
+                      )}
+                      {pedido.direccion && (
+                        <span style={{ fontSize: "0.82rem", color: "#e2e8f0" }}>
+                          <span style={{ color: "#f59e0b", fontWeight: 700 }}>🚚 Envío → </span>
+                          {pedido.direccion}
+                          {pedido.referencia && (
+                            <span style={{ color: "#64748b" }}> · {pedido.referencia}</span>
+                          )}
+                        </span>
+                      )}
+                      {pedido.ubicacion_url && (
+                        <a
+                          href={pedido.ubicacion_url}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: "0.82rem", color: "#38bdf8", textDecoration: "none", width: "fit-content" }}
+                        >
+                          📍 Ver ubicación en el mapa
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   {/* Notas */}
                   {pedido.notas && (

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "../utils/axiosInstance";
+import QrEvento from "../components/QrEvento";
+import "../styles/Eventos.css";
 
 // El catálogo del evento vive en el sitio público, no en el sistema.
 const CATALOGO = "https://thenorthshop.net";
@@ -11,6 +13,43 @@ const card = {
   padding: "20px 24px",
 };
 
+// Botones: sólo la acción principal lleva color, el resto neutro. Con seis
+// botones de seis colores el ojo no sabe dónde mirar.
+const btn = {
+  background: "#0f172a",
+  border: "1px solid #273449",
+  color: "#94a3b8",
+  borderRadius: 8,
+  padding: "5px 12px",
+  fontSize: "0.8rem",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const btnPrimario = {
+  ...btn,
+  background: "#065f46",
+  border: "1px solid #10b981",
+  color: "#6ee7b7",
+  fontWeight: 600,
+};
+
+const btnPeligro = { ...btn, border: "1px solid #3f1d1d", color: "#f87171" };
+
+const seccion = {
+  fontSize: "0.7rem",
+  fontWeight: 700,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "#475569",
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  margin: "22px 0 14px",
+};
+
+const rayita = { flex: 1, height: 1, background: "#1e293b" };
+
 const label = {
   color: "#64748b",
   fontSize: "0.72rem",
@@ -19,17 +58,34 @@ const label = {
   letterSpacing: "0.08em",
 };
 
-const input = {
-  background: "#0f172a",
-  border: "1px solid #1e293b",
-  color: "#e2e8f0",
-  borderRadius: 8,
-};
-
 const fmt = (n) =>
   Number(n).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
 
 const hoy = () => new Date().toISOString().slice(0, 10);
+
+// Se achica en el navegador antes de mandarlo: los logos que pasan suelen ser
+// de varios MB y en la carta se ven a 80px de alto.
+const achicarLogo = (file) =>
+  new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Ese archivo no es una imagen"));
+      img.onload = () => {
+        const ALTO = 240;
+        const escala = Math.min(1, ALTO / img.height);
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        // PNG para no perder la transparencia, que en fondo negro se nota
+        resolve(c.toDataURL("image/png"));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
 const RENGLON = { gusto_id: "", cantidad: "", precio: "" };
 
 export default function Eventos() {
@@ -38,13 +94,21 @@ export default function Eventos() {
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState(null);
 
-  const [form, setForm] = useState({ nombre: "", lugar: "", fecha: hoy() });
+  const [form, setForm] = useState({ nombre: "", lugar: "", fecha: hoy(), comision_unidad: 5000, nota: "" });
   const [items, setItems] = useState([{ ...RENGLON }]);
+  const [logos, setLogos] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
   const [detalle, setDetalle] = useState(null);      // evento abierto para cerrar
   const [devoluciones, setDevoluciones] = useState({});
   const [cerrando, setCerrando] = useState(false);
+  const [qr, setQr] = useState(null);   // { url, titulo, subtitulo }
+  // Editar reusa el formulario de arriba: guarda el id y lo que ya tenía
+  // asignado, para no contar dos veces el stock que ya salió de Central.
+  const [editando, setEditando] = useState(null);
+  const [originales, setOriginales] = useState({});
+  const [stats, setStats] = useState(null);
+  const [verStats, setVerStats] = useState(false);
 
   const aviso = (text, tipo = "ok") => {
     setMsg({ text, tipo });
@@ -53,13 +117,15 @@ export default function Eventos() {
 
   const cargar = useCallback(async () => {
     try {
-      const [ev, prod] = await Promise.all([
+      const [ev, prod, st] = await Promise.all([
         axios.get("/eventos"),
         // El stock de Central es lo que se puede llevar a una fiesta
         axios.get("/public/productos", { params: { sucursal_id: 7, inStock: 1 } }),
+        axios.get("/eventos/estadisticas").catch(() => ({ data: null })),
       ]);
       setEventos(ev.data);
       setProductos(prod.data);
+      setStats(st.data);
     } catch (e) {
       aviso(e.response?.data?.error || "No se pudieron cargar los eventos", "error");
     } finally {
@@ -84,9 +150,12 @@ export default function Eventos() {
       ? { ...it, gusto_id: gustoId, precio: it.precio || (stockDe[gustoId]?.precio ?? "") }
       : it)));
 
-  const total = items.reduce(
-    (a, it) => a + (Number(it.cantidad) || 0) * (Number(it.precio) || 0), 0);
+  const comision = Number(form.comision_unidad) || 0;
   const unidades = items.reduce((a, it) => a + (Number(it.cantidad) || 0), 0);
+  const bruto = items.reduce(
+    (a, it) => a + (Number(it.cantidad) || 0) * (Number(it.precio) || 0), 0);
+  // Lo que queda para nosotros: la fiesta se lleva una comisión por unidad
+  const neto = bruto - unidades * comision;
 
   const crear = async (e) => {
     e.preventDefault();
@@ -97,31 +166,97 @@ export default function Eventos() {
       if (!it.gusto_id) return aviso(`Renglón ${n}: elegí el producto`, "error");
       if (!Number(it.cantidad)) return aviso(`Renglón ${n}: falta la cantidad`, "error");
       if (!Number(it.precio)) return aviso(`Renglón ${n}: falta el precio`, "error");
-      const disp = stockDe[it.gusto_id]?.stock ?? 0;
+      if (Number(it.precio) <= comision) {
+        return aviso(`Renglón ${n}: a ese precio no te queda nada después de la comisión`, "error");
+      }
+      const disp = (stockDe[it.gusto_id]?.stock ?? 0) + (originales[it.gusto_id] || 0);
       if (Number(it.cantidad) > disp) {
-        return aviso(`Renglón ${n}: en Central hay ${disp} y pediste ${it.cantidad}`, "error");
+        return aviso(`Renglón ${n}: podés poner hasta ${disp} y pediste ${it.cantidad}`, "error");
       }
     }
 
+    const cuerpo = {
+      ...form,
+      logos,
+      items: items.map((it) => ({
+        gusto_id: Number(it.gusto_id),
+        cantidad: Number(it.cantidad),
+        precio: Number(it.precio),
+      })),
+    };
+
     setGuardando(true);
     try {
-      const res = await axios.post("/eventos", {
-        ...form,
-        items: items.map((it) => ({
-          gusto_id: Number(it.gusto_id),
-          cantidad: Number(it.cantidad),
-          precio: Number(it.precio),
-        })),
-      });
-      aviso("Evento creado y stock descontado de Central");
-      setForm({ nombre: "", lugar: "", fecha: hoy() });
-      setItems([{ ...RENGLON }]);
+      if (editando) {
+        await axios.put(`/eventos/${editando}`, cuerpo);
+        aviso("Evento actualizado y stock ajustado");
+      } else {
+        const res = await axios.post("/eventos", cuerpo);
+        aviso("Evento creado y stock descontado de Central");
+        navigator.clipboard?.writeText(`${CATALOGO}/evento/${res.data.slug}`).catch(() => {});
+      }
+      limpiarForm();
       cargar();
-      navigator.clipboard?.writeText(`${CATALOGO}/evento/${res.data.slug}`).catch(() => {});
     } catch (e) {
-      aviso(e.response?.data?.error || "No se pudo crear", "error");
+      aviso(e.response?.data?.error || "No se pudo guardar", "error");
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const limpiarForm = () => {
+    setForm({ nombre: "", lugar: "", fecha: hoy(), comision_unidad: form.comision_unidad, nota: "" });
+    setItems([{ ...RENGLON }]);
+    setLogos([]);
+    setEditando(null);
+    setOriginales({});
+  };
+
+  const editar = async (id) => {
+    try {
+      const { data } = await axios.get(`/eventos/${id}`);
+      setForm({
+        nombre: data.nombre,
+        lugar: data.lugar || "",
+        fecha: String(data.fecha).slice(0, 10),
+        comision_unidad: Number(data.comision_unidad),
+        nota: data.nota || "",
+      });
+      setItems(data.items.map((i) => ({
+        gusto_id: String(i.gusto_id),
+        cantidad: String(i.cantidad_llevada),
+        precio: String(Number(i.precio)),
+      })));
+      setLogos(data.logos || []);
+      setOriginales(Object.fromEntries(data.items.map((i) => [String(i.gusto_id), i.cantidad_llevada])));
+      setEditando(id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      aviso(e.response?.data?.error || "No se pudo abrir el evento", "error");
+    }
+  };
+
+  const reabrir = async (ev) => {
+    if (!window.confirm(
+      `Reabrir "${ev.nombre}"? Lo que había vuelto a Central sale de nuevo y vas a poder editarlo.`
+    )) return;
+    try {
+      await axios.post(`/eventos/${ev.id}/reabrir`);
+      aviso("Evento reabierto");
+      cargar();
+    } catch (e) {
+      aviso(e.response?.data?.error || "No se pudo reabrir", "error");
+    }
+  };
+
+  const subirLogos = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3 - logos.length);
+    e.target.value = "";
+    try {
+      const nuevos = await Promise.all(files.map(achicarLogo));
+      setLogos((xs) => [...xs, ...nuevos].slice(0, 3));
+    } catch (err) {
+      aviso(err.message || "No se pudo cargar el logo", "error");
     }
   };
 
@@ -146,7 +281,7 @@ export default function Eventos() {
           cantidad: Number(devoluciones[i.id]) || 0,
         })),
       });
-      aviso(`Cerrado: ${res.data.vendidas} unidades por ${fmt(res.data.recaudado)}`);
+      aviso(`Cerrado: ${res.data.vendidas} unidades · ${fmt(res.data.neto)} para vos`);
       setDetalle(null);
       cargar();
     } catch (e) {
@@ -171,18 +306,24 @@ export default function Eventos() {
   };
 
   const copiarLink = (slug) => {
-    navigator.clipboard?.writeText(`${CATALOGO}/evento/${slug}`);
+    navigator.clipboard?.writeText(slug ? `${CATALOGO}/evento/${slug}` : `${CATALOGO}/fiesta`);
     aviso("Link copiado");
   };
 
   // Cierre: totales en vivo mientras se cargan las devoluciones
   const resumenCierre = useMemo(() => {
     if (!detalle) return null;
+    const com = Number(detalle.comision_unidad) || 0;
     return detalle.items.reduce((acc, i) => {
       const vuelven = Number(devoluciones[i.id]) || 0;
       const vendidas = i.cantidad_llevada - vuelven;
-      return { vendidas: acc.vendidas + vendidas, plata: acc.plata + vendidas * Number(i.precio) };
-    }, { vendidas: 0, plata: 0 });
+      return {
+        vendidas: acc.vendidas + vendidas,
+        bruto: acc.bruto + vendidas * Number(i.precio),
+        comision: acc.comision + vendidas * com,
+        neto: acc.neto + vendidas * (Number(i.precio) - com),
+      };
+    }, { vendidas: 0, bruto: 0, comision: 0, neto: 0 });
   }, [detalle, devoluciones]);
 
   return (
@@ -195,6 +336,36 @@ export default function Eventos() {
         </p>
       </div>
 
+      {/* El QR se imprime una sola vez con este link: siempre muestra el evento
+          del día, sin importar cuál sea. */}
+      <div style={{ ...card, marginBottom: 16, borderColor: "#334155" }}>
+        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div style={{ minWidth: 0 }}>
+            <p style={{ ...label, color: "#38bdf8", marginBottom: 4 }}>Link fijo para el QR</p>
+            <div style={{ color: "#e2e8f0", fontWeight: 600, wordBreak: "break-all" }}>
+              {CATALOGO}/fiesta
+            </div>
+            <p style={{ color: "#64748b", fontSize: "0.78rem", margin: "6px 0 0" }}>
+              Imprimí el QR una vez con este link. Muestra solo el evento abierto del día;
+              si no hay ninguno, invita a ver el catálogo de siempre.
+            </p>
+          </div>
+          <div className="d-flex gap-2">
+            <button onClick={() => setQr({
+              url: `${CATALOGO}/fiesta`,
+              titulo: "The North Shop",
+              subtitulo: "Catálogo de vapers",
+            })} style={btnPrimario}>
+              Ver QR
+            </button>
+            <button onClick={() => copiarLink(null)} style={btn}>Copiar</button>
+            <a href={`${CATALOGO}/fiesta`} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: "none" }}>
+              Abrir
+            </a>
+          </div>
+        </div>
+      </div>
+
       {msg && (
         <div className={`alert ${msg.tipo === "error" ? "alert-danger" : "alert-success"} py-2`}
           style={{ fontSize: "0.88rem" }}>
@@ -204,35 +375,109 @@ export default function Eventos() {
 
       {/* ── Nuevo evento ── */}
       <div style={card} className="mb-4">
-        <div style={{ ...label, marginBottom: 16 }}>Nuevo evento</div>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div style={label}>{editando ? "Editando evento" : "Nuevo evento"}</div>
+          {editando && (
+            <button type="button" className="btn btn-sm" onClick={limpiarForm}
+              style={{ background: "transparent", border: "1px solid #334155", color: "#94a3b8" }}>
+              Cancelar edición
+            </button>
+          )}
+        </div>
         <form onSubmit={crear}>
           <div className="row g-3 mb-3">
-            <div className="col-12 col-md-5">
+            <div className="col-12 col-md-4">
               <p style={label} className="mb-1">Nombre</p>
-              <input className="form-control form-control-sm" style={input}
+              <input className="ev-in"
                 placeholder="Ej: Fiesta Tamo Chelo" value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             </div>
             <div className="col-12 col-md-4">
               <p style={label} className="mb-1">Lugar <span style={{ textTransform: "none" }}>(opcional)</span></p>
-              <input className="form-control form-control-sm" style={input}
+              <input className="ev-in"
                 placeholder="Ej: Club Náutico" value={form.lugar}
                 onChange={(e) => setForm({ ...form, lugar: e.target.value })} />
             </div>
-            <div className="col-12 col-md-3">
+            <div className="col-6 col-md-2">
               <p style={label} className="mb-1">Fecha</p>
-              <input type="date" className="form-control form-control-sm" style={input}
+              <input type="date" className="ev-in"
                 value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
             </div>
+            <div className="col-6 col-md-2">
+              <p style={label} className="mb-1">Comisión x unidad</p>
+              <input type="number" min="0" className="ev-in"
+                value={form.comision_unidad}
+                onChange={(e) => setForm({ ...form, comision_unidad: e.target.value })} />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <p style={label} className="mb-1">
+              Aviso para el cliente <span style={{ textTransform: "none" }}>(opcional)</span>
+            </p>
+            <input className="ev-in"
+              maxLength={300} value={form.nota}
+              placeholder="Ej: Hay dos barras. Si no ves alguno, puede estar en la otra o haberse agotado."
+              onChange={(e) => setForm({ ...form, nota: e.target.value })} />
+            {!form.nota && (
+              <button type="button" onClick={() => setForm({ ...form,
+                nota: "Hay dos barras. Si no encontrás alguno, puede que se haya vendido o que esté en la otra barra." })}
+                style={{ background: "none", border: "none", color: "#38bdf8", fontSize: "0.75rem",
+                  padding: "4px 0 0", cursor: "pointer" }}>
+                Usar el texto de las dos barras
+              </button>
+            )}
+          </div>
+
+          <div className="mb-3">
+            <p style={label} className="mb-1">
+              Logos de la fiesta <span style={{ textTransform: "none" }}>(opcional, hasta 3)</span>
+            </p>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              {logos.map((src, i) => (
+                <div key={i} style={{ position: "relative" }}>
+                  <img src={src} alt="" style={{
+                    height: 46, width: "auto", background: "#0f172a",
+                    border: "1px solid #1e293b", borderRadius: 8, padding: 4 }} />
+                  <button type="button" onClick={() => setLogos((xs) => xs.filter((_, k) => k !== i))}
+                    title="Quitar"
+                    style={{ position: "absolute", top: -7, right: -7, width: 20, height: 20,
+                      borderRadius: "50%", background: "#1a0000", border: "1px solid #3f0000",
+                      color: "#f87171", fontSize: 12, lineHeight: 1, cursor: "pointer", padding: 0 }}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              {logos.length < 3 && (
+                <label style={{ display: "inline-flex", alignItems: "center",
+                  padding: "12px 16px", cursor: "pointer", color: "#64748b",
+                  fontSize: "0.8rem", borderStyle: "dashed" }}>
+                  + Agregar logo
+                  <input type="file" accept="image/*" multiple hidden onChange={subirLogos} />
+                </label>
+              )}
+            </div>
+          </div>
+
+          <div style={seccion}>
+            <span>Qué dejás</span>
+            <span style={rayita} />
+          </div>
+
+          <div className="row g-2 d-none d-md-flex" style={{ margin: "0 0 6px", padding: "0 12px" }}>
+            <div className="col-md-6"><span style={label}>Producto</span></div>
+            <div className="col-md-2"><span style={label}>Cantidad</span></div>
+            <div className="col-md-3"><span style={label}>Precio al público</span></div>
+            <div className="col-md-1" />
           </div>
 
           {items.map((it, idx) => {
             const info = stockDe[it.gusto_id];
             return (
-              <div key={idx} className="row g-2 align-items-end mb-2">
+              <div key={idx} className="row g-2 align-items-start ev-renglon"
+                style={{ marginLeft: 0, marginRight: 0 }}>
                 <div className="col-12 col-md-6">
-                  {idx === 0 && <p style={label} className="mb-1">Producto</p>}
-                  <select className="form-select form-select-sm" style={input}
+                  <select className="ev-in"
                     value={it.gusto_id} onChange={(e) => elegirProducto(idx, e.target.value)}>
                     <option value="">-- Elegí el producto --</option>
                     {productos.map((p) => (
@@ -241,54 +486,143 @@ export default function Eventos() {
                   </select>
                 </div>
                 <div className="col-5 col-md-2">
-                  {idx === 0 && <p style={label} className="mb-1">Cantidad</p>}
-                  <input type="number" min="1" className="form-control form-control-sm" style={input}
+                  <input type="number" min="1" className="ev-in"
                     placeholder="0" value={it.cantidad}
                     onChange={(e) => setItem(idx, "cantidad", e.target.value)} />
-                  {info && (
-                    <div style={{ fontSize: "0.7rem", color: Number(it.cantidad) > info.stock ? "#f87171" : "#475569" }}>
-                      hay {info.stock}
-                    </div>
-                  )}
+                  {info && (() => {
+                    const tope = info.stock + (originales[it.gusto_id] || 0);
+                    return (
+                      <div className={`ev-hint${Number(it.cantidad) > tope ? " pasado" : ""}`}>
+                        hasta {tope}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="col-5 col-md-3">
-                  {idx === 0 && <p style={label} className="mb-1">Precio de venta</p>}
-                  <input type="number" min="1" className="form-control form-control-sm" style={input}
+                  <input type="number" min="1" className="ev-in"
                     placeholder="0" value={it.precio}
                     onChange={(e) => setItem(idx, "precio", e.target.value)} />
                 </div>
-                <div className="col-2 col-md-1">
+                <div className="col-2 col-md-1 d-flex justify-content-end">
                   {items.length > 1 && (
-                    <button type="button" onClick={() => setItems((xs) => xs.filter((_, i) => i !== idx))}
-                      style={{ background: "transparent", border: "1px solid #3f0000", color: "#f87171",
-                        borderRadius: 8, padding: "4px 10px", cursor: "pointer", width: "100%" }}>
+                    <button type="button" title="Quitar"
+                      onClick={() => setItems((xs) => xs.filter((_, i) => i !== idx))}
+                      style={{ ...btnPeligro, padding: "5px 10px", lineHeight: 1 }}>
                       ×
                     </button>
                   )}
                 </div>
+
+                {Number(it.cantidad) > 0 && Number(it.precio) > 0 && (
+                  <div className="col-12 ev-hint" style={{ marginTop: 2 }}>
+                    {it.cantidad} × {fmt(it.precio)} = {fmt(Number(it.cantidad) * Number(it.precio))}
+                    {" · "}te quedan {fmt(Number(it.cantidad) * (Number(it.precio) - comision))}
+                  </div>
+                )}
               </div>
             );
           })}
 
           <button type="button" onClick={() => setItems((xs) => [...xs, { ...RENGLON }])}
-            style={{ width: "100%", background: "transparent", border: "1px dashed #334155",
-              color: "#64748b", borderRadius: 8, padding: 9, fontSize: "0.82rem",
-              cursor: "pointer", margin: "10px 0 16px" }}>
+            style={{ width: "100%", background: "transparent", border: "1px dashed #273449",
+              color: "#64748b", borderRadius: 10, padding: 10, fontSize: "0.82rem",
+              cursor: "pointer", margin: "4px 0 18px" }}>
             + Agregar producto
           </button>
 
-          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
-              {unidades} unidades · si se vende todo son{" "}
-              <strong style={{ color: "#10b981" }}>{fmt(total)}</strong>
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-3"
+            style={{ borderTop: "1px solid #1e293b", paddingTop: 16 }}>
+            <div className="d-flex flex-wrap" style={{ gap: 22 }}>
+              {[
+                { t: "Unidades", v: unidades, c: "#e2e8f0" },
+                { t: "Si se vende todo", v: fmt(bruto), c: "#e2e8f0" },
+                { t: "Para la fiesta", v: fmt(unidades * comision), c: "#94a3b8" },
+                { t: "Te queda", v: fmt(neto), c: "#10b981" },
+              ].map((x) => (
+                <div key={x.t}>
+                  <div style={{ ...label, marginBottom: 2 }}>{x.t}</div>
+                  <div style={{ color: x.c, fontWeight: 700, fontSize: "1.05rem" }}>{x.v}</div>
+                </div>
+              ))}
             </div>
-            <button className="btn btn-sm" type="submit" disabled={guardando}
-              style={{ background: "#065f46", border: "1px solid #10b981", color: "#6ee7b7", fontWeight: 600 }}>
-              {guardando ? "Creando..." : "Crear evento y descontar de Central"}
+            <button type="submit" disabled={guardando}
+              style={{ ...btnPrimario, padding: "9px 18px" }}>
+              {guardando
+                ? "Guardando..."
+                : editando
+                ? "Guardar cambios y ajustar stock"
+                : "Crear evento y descontar de Central"}
             </button>
           </div>
         </form>
       </div>
+
+      {/* ── Qué se vende en las fiestas ── */}
+      {stats?.eventos > 0 && (
+        <div style={{ ...card, marginBottom: 16 }}>
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div className="d-flex flex-wrap" style={{ gap: 24 }}>
+              {[
+                { t: "Fiestas cerradas", v: stats.eventos, c: "#e2e8f0" },
+                { t: "Vendidas", v: `${stats.vendidas} de ${stats.llevadas}`, c: "#e2e8f0" },
+                { t: "Recaudado", v: fmt(stats.bruto), c: "#94a3b8" },
+                { t: "Te quedó", v: fmt(stats.neto), c: "#10b981" },
+              ].map((x) => (
+                <div key={x.t}>
+                  <div style={{ ...label, marginBottom: 2 }}>{x.t}</div>
+                  <div style={{ color: x.c, fontWeight: 700, fontSize: "1.05rem" }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setVerStats((v) => !v)} style={btn}>
+              {verStats ? "Ocultar detalle" : "Qué se vende en fiestas"}
+            </button>
+          </div>
+
+          {verStats && (
+            <div style={{ marginTop: 18, overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr>
+                    {["Modelo", "Fiestas", "Llevadas", "Vendidas", "Salida", "Te dejó"].map((h, i) => (
+                      <th key={h} style={{ ...label, padding: "8px 10px",
+                        borderBottom: "1px solid #1e293b", textAlign: i ? "right" : "left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.modelos.map((m) => {
+                    // Verde si se vendió casi todo, rojo si volvió casi entero
+                    const color = m.salida_pct >= 70 ? "#10b981"
+                      : m.salida_pct >= 35 ? "#fbbf24" : "#f87171";
+                    const celda = { padding: "9px 10px", borderBottom: "1px solid #1e293b",
+                      color: "#cbd5e1", textAlign: "right" };
+                    return (
+                      <tr key={m.modelo}>
+                        <td style={{ ...celda, textAlign: "left", color: "#e2e8f0" }}>
+                          {m.modelo.trim()}
+                          <div style={{ color: "#64748b", fontSize: "0.72rem" }}>
+                            {fmt(m.precio_prom)} promedio
+                          </div>
+                        </td>
+                        <td style={celda}>{m.eventos}</td>
+                        <td style={celda}>{m.llevadas}</td>
+                        <td style={celda}>{m.vendidas}</td>
+                        <td style={{ ...celda, color, fontWeight: 700 }}>{m.salida_pct}%</td>
+                        <td style={{ ...celda, color: "#10b981" }}>{fmt(m.neto)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p style={{ color: "#64748b", fontSize: "0.76rem", marginTop: 10 }}>
+                <strong>Salida</strong> es cuánto de lo que llevaste se vendió. Cerca del 100%
+                significa que te quedaste corto; muy bajo, que llevaste de más.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Listado ── */}
       {cargando && <div className="text-center py-4"><div className="spinner-border text-secondary" /></div>}
@@ -300,55 +634,71 @@ export default function Eventos() {
       )}
 
       {eventos.map((ev) => (
-        <div key={ev.id} style={{ ...card, marginBottom: 12 }}>
-          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-              <div className="d-flex align-items-center gap-2">
-                <strong style={{ color: "#f1f5f9" }}>{ev.nombre}</strong>
+        <div key={ev.id} style={{
+          ...card, marginBottom: 12, padding: "18px 22px",
+          // Filo de color al costado: se distingue de un vistazo cuál sigue abierto
+          borderLeft: `3px solid ${ev.estado === "abierto" ? "#10b981" : "#334155"}`,
+        }}>
+          <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div style={{ minWidth: 0 }}>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <strong style={{ color: "#f1f5f9", fontSize: "1.02rem" }}>{ev.nombre}</strong>
                 <span style={{
-                  fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.06em",
-                  padding: "2px 8px", borderRadius: 5,
-                  background: ev.estado === "abierto" ? "#065f4633" : "#33415533",
-                  color: ev.estado === "abierto" ? "#6ee7b7" : "#94a3b8",
+                  fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.1em",
+                  fontWeight: 700, padding: "3px 9px", borderRadius: 999,
+                  background: ev.estado === "abierto" ? "#065f4633" : "#1e293b",
+                  color: ev.estado === "abierto" ? "#6ee7b7" : "#8296ad",
                 }}>{ev.estado}</span>
               </div>
-              <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 3 }}>
+              <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 4 }}>
                 {new Date(ev.fecha).toLocaleDateString("es-AR")}
                 {ev.lugar && ` · ${ev.lugar}`} · {ev.productos} modelos · {ev.unidades} unidades
               </div>
-              {ev.estado === "cerrado" && (
-                <div style={{ color: "#10b981", fontSize: "0.82rem", marginTop: 5 }}>
-                  Vendidas {ev.vendidas} · {fmt(ev.recaudado)}
-                </div>
-              )}
             </div>
 
-            <div className="d-flex gap-2 flex-wrap">
+            <div className="d-flex gap-2 flex-wrap align-items-start">
               {ev.estado === "abierto" && (
                 <>
-                  <button className="btn btn-sm" onClick={() => copiarLink(ev.slug)}
-                    style={{ background: "#0f172a", border: "1px solid #334155", color: "#38bdf8" }}>
-                    Copiar link
-                  </button>
-                  <a className="btn btn-sm" href={`${CATALOGO}/evento/${ev.slug}`}
-                    target="_blank" rel="noreferrer"
-                    style={{ background: "#0f172a", border: "1px solid #334155", color: "#94a3b8" }}>
-                    Ver
-                  </a>
-                  <button className="btn btn-sm" onClick={() => abrirCierre(ev.id)}
-                    style={{ background: "#065f46", border: "1px solid #10b981", color: "#6ee7b7" }}>
-                    Cerrar
-                  </button>
+                  <button onClick={() => setQr({
+                    url: `${CATALOGO}/evento/${ev.slug}`,
+                    titulo: ev.nombre,
+                    subtitulo: ev.lugar || "Catálogo de vapers",
+                  })} style={btn}>QR</button>
+                  <button onClick={() => copiarLink(ev.slug)} style={btn}>Copiar link</button>
+                  <a href={`${CATALOGO}/evento/${ev.slug}`} target="_blank" rel="noreferrer"
+                    style={{ ...btn, textDecoration: "none" }}>Abrir</a>
+                  <button onClick={() => editar(ev.id)} style={btn}>Editar</button>
+                  <button onClick={() => abrirCierre(ev.id)} style={btnPrimario}>Cerrar</button>
                 </>
               )}
-              <button className="btn btn-sm" onClick={() => eliminar(ev)}
-                style={{ background: "#1a0000", border: "1px solid #3f0000", color: "#f87171" }}>
-                Eliminar
-              </button>
+
+              {ev.estado === "cerrado" && (
+                <button onClick={() => reabrir(ev)} style={btn}>Reabrir</button>
+              )}
+              <button onClick={() => eliminar(ev)} style={btnPeligro}>Eliminar</button>
             </div>
           </div>
+
+          {ev.estado === "cerrado" && (
+            <div className="d-flex flex-wrap" style={{
+              gap: 24, marginTop: 14, paddingTop: 14, borderTop: "1px solid #1e293b" }}>
+              {[
+                { t: "Vendidas", v: ev.vendidas, c: "#e2e8f0" },
+                { t: "Recaudado", v: fmt(ev.bruto), c: "#e2e8f0" },
+                { t: "Para la fiesta", v: fmt(ev.comision), c: "#94a3b8" },
+                { t: "Te quedó", v: fmt(ev.neto), c: "#10b981" },
+              ].map((x) => (
+                <div key={x.t}>
+                  <div style={{ ...label, marginBottom: 2 }}>{x.t}</div>
+                  <div style={{ color: x.c, fontWeight: 700 }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
+
+      {qr && <QrEvento {...qr} onClose={() => setQr(null)} />}
 
       {/* ── Cierre ── */}
       {detalle && (
@@ -381,8 +731,8 @@ export default function Eventos() {
                   </div>
                   <div className="d-flex align-items-center gap-2">
                     <input type="number" min="0" max={i.cantidad_llevada}
-                      className="form-control form-control-sm" placeholder="0"
-                      style={{ ...input, width: 76, textAlign: "right" }}
+                      className="ev-in" placeholder="0"
+                      style={{ width: 82, textAlign: "right" }}
                       value={devoluciones[i.id]}
                       onChange={(e) => setDevoluciones({ ...devoluciones, [i.id]: e.target.value })} />
                     <span style={{ color: vendidas > 0 ? "#10b981" : "#475569",
@@ -396,9 +746,12 @@ export default function Eventos() {
 
             <div className="d-flex justify-content-between align-items-center mt-3 pt-3"
               style={{ borderTop: "1px solid #1e293b" }}>
-              <div style={{ color: "#94a3b8", fontSize: "0.86rem" }}>
-                {resumenCierre.vendidas} vendidas ·{" "}
-                <strong style={{ color: "#10b981" }}>{fmt(resumenCierre.plata)}</strong>
+              <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+                {resumenCierre.vendidas} vendidas · {fmt(resumenCierre.bruto)} en total ·{" "}
+                {fmt(resumenCierre.comision)} para la fiesta
+                <div style={{ color: "#10b981", fontWeight: 700, fontSize: "0.95rem" }}>
+                  {fmt(resumenCierre.neto)} para vos
+                </div>
               </div>
               <div className="d-flex gap-2">
                 <button className="btn btn-sm" onClick={() => setDetalle(null)}

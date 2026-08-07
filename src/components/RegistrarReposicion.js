@@ -45,6 +45,7 @@ function RegistrarReposicion() {
     sucursal_id: "",
     cantidad: "",
     precio_costo: "",
+    precio_costo_usd: "",
   });
 
   const normalizar = (str = "") =>
@@ -90,7 +91,7 @@ function RegistrarReposicion() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "sucursal_id") {
-      setForm((prev) => ({ ...prev, sucursal_id: value, gusto_id: "", cantidad: "", precio_costo: "" }));
+      setForm((prev) => ({ ...prev, sucursal_id: value, gusto_id: "", cantidad: "", precio_costo: "", precio_costo_usd: "" }));
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
@@ -241,9 +242,14 @@ function RegistrarReposicion() {
       if (form.sucursal_id === CENTRAL_ID && form.precio_costo !== "") {
         payload.precio_costo = Number(form.precio_costo);
       }
+      // El USD es lo que cobra el proveedor: queda guardado por compra, así el
+      // costo en pesos se puede comparar contra el dólar de cada momento.
+      if (form.sucursal_id === CENTRAL_ID && form.precio_costo_usd !== "") {
+        payload.precio_costo_usd = Number(form.precio_costo_usd);
+      }
       await axios.post("/reposicion", payload);
       toast.success("Reposición registrada correctamente");
-      setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "", precio_costo: "" }));
+      setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "", precio_costo: "", precio_costo_usd: "" }));
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
@@ -539,6 +545,31 @@ function RegistrarReposicion() {
               disabled={!form.gusto_id || loadingSubmit}
               style={iStyle}
             />
+            <label style={{ ...lStyle, marginTop: 14 }}>
+              Precio de costo (USD)
+              <span style={{ color: "#475569", fontWeight: 400, marginLeft: 6 }}>— opcional</span>
+            </label>
+            <input
+              type="number"
+              className="form-control"
+              name="precio_costo_usd"
+              value={form.precio_costo_usd}
+              onChange={handleChange}
+              min="0"
+              step="0.01"
+              placeholder="¿Cuántos USD por unidad?"
+              disabled={!form.gusto_id || loadingSubmit}
+              style={iStyle}
+            />
+            {form.precio_costo !== "" && Number(form.precio_costo_usd) > 0 && (
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
+                Te tomó el dólar a{" "}
+                <strong style={{ color: "#e2e8f0" }}>
+                  ${(Number(form.precio_costo) / Number(form.precio_costo_usd)).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                </strong>
+              </div>
+            )}
+
             {form.precio_costo !== "" && seleccionado?.precio && (
               <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
                 Precio de venta actual: <strong style={{ color: "#e2e8f0" }}>${Number(seleccionado.precio).toLocaleString("es-AR")}</strong>
