@@ -191,6 +191,32 @@ function Navbar() {
               </>
             )}
 
+                {/* ── Eventos: catálogo con QR para fiestas (solo admin) ── */}
+                {rol === "admin" && (
+                  <li className="nav-item">
+                    <Link
+                      className={`nav-link ${location.pathname === "/eventos" ? "active" : ""}`}
+                      to="/eventos"
+                      onClick={cerrarMenu}
+                    >
+                      Eventos
+                    </Link>
+                  </li>
+                )}
+
+                {/* ── Shisha (solo fagu sucursal_id 10 y admin) ── */}
+                {(rol === "admin" || decoded?.sucursal_id === 10) && (
+                  <li className="nav-item">
+                    <Link
+                      className={`nav-link ${location.pathname === "/shisha" ? "active" : ""}`}
+                      to="/shisha"
+                      onClick={cerrarMenu}
+                    >
+                      Shisha
+                    </Link>
+                  </li>
+                )}
+
             <li className="nav-item">
               <button className="nav-link btn btn-link text-white" onClick={handleLogout}>
                 Cerrar sesión

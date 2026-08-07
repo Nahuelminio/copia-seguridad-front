@@ -41,6 +41,8 @@ import VendedorDashboard from "./pages/VendedorDashboard";
 import VendedoresStats from "./pages/VendedoresStats";
 import CostosCentral from "./pages/CostosCentral";
 import PedidosCentral from "./pages/PedidosCentral";
+import ShishaPage from "./pages/ShishaPage";
+import Eventos from "./pages/Eventos";
 
 // Componente wrapper para mostrar el Navbar solo si no está en login
 const AppLayout = ({ children }) => {
@@ -192,6 +194,15 @@ function App() {
             }
           />
 
+          <Route
+            path="/eventos"
+            element={
+              <PrivateRoute>
+                <Eventos />
+              </PrivateRoute>
+            }
+          />
+
           {/* Mayorista */}
           <Route
             path="/mayorista"
@@ -274,6 +285,16 @@ function App() {
             element={
               <PrivateRoute>
                 <PedidosCentral />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Shisha - solo fagu (sucursal 10) y admin */}
+          <Route
+            path="/shisha"
+            element={
+              <PrivateRoute>
+                <ShishaPage />
               </PrivateRoute>
             }
           />
