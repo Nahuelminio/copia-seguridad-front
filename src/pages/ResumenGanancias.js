@@ -50,6 +50,7 @@ export default function ResumenGanancias() {
       const margen = f.total_ventas ? (f.ganancia / f.total_ventas) * 100 : 0;
       return {
         "Sucursal": f.sucursal,
+        "Tipo": f.tipo === "vendedor" ? "Vendedor" : "Sucursal",
         "Ventas Regulares": Number(f.ventas_regulares),
         "Ventas Mayorista": Number(f.ventas_mayorista),
         "Total Ventas": Number(f.total_ventas),
@@ -137,7 +138,18 @@ export default function ResumenGanancias() {
                       : 0;
                     return (
                       <tr key={i}>
-                        <td>{fila.sucursal}</td>
+                        <td>
+                          {fila.sucursal}
+                          {fila.tipo === "vendedor" && (
+                            <span
+                              className="badge ms-2"
+                              style={{ background: "#7c3aed" }}
+                              title="Vendedor: sus ventas ya no se suman dentro de la sucursal"
+                            >
+                              vendedor
+                            </span>
+                          )}
+                        </td>
                         <td>{formatoMoneda(fila.ventas_regulares)}</td>
                         <td>
                           {Number(fila.ventas_mayorista) > 0 ? (
@@ -203,7 +215,17 @@ export default function ResumenGanancias() {
                   <div key={i} className="col-12">
                     <div className="card shadow-sm">
                       <div className="card-body p-3">
-                        <h5 className="card-title mb-2">{fila.sucursal}</h5>
+                        <h5 className="card-title mb-2">
+                          {fila.sucursal}
+                          {fila.tipo === "vendedor" && (
+                            <span
+                              className="badge ms-2"
+                              style={{ background: "#7c3aed", fontSize: "0.7rem" }}
+                            >
+                              vendedor
+                            </span>
+                          )}
+                        </h5>
                         <p className="mb-1">
                           <strong>Ventas regulares:</strong>{" "}
                           {formatoMoneda(fila.ventas_regulares)}

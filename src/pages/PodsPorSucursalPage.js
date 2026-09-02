@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "../utils/axiosInstance";
 import { getUsuario } from "../utils/auth";
+import { planillaStockHtml } from "../components/planillaStockHtml";
 
 const inputStyle = {
   background: "#111827",
@@ -99,6 +100,52 @@ export default function PodsPorSucursalPage() {
     else fetchData();
   };
 
+  // Planilla de control: pide los datos con modelo y gusto separados y abre
+  // el diálogo de impresión. Se usa un iframe con srcdoc y no document.write,
+  // que pinta a medias y duplica el texto.
+  const [imprimiendo, setImprimiendo] = useState(false);
+
+  const imprimirPlanilla = async () => {
+    setImprimiendo(true);
+    try {
+      const { data: filas } = await axios.get("/pods-por-sucursal/planilla", {
+        params: {
+          q: q || undefined,
+          solo_con_stock: soloConStock ? 1 : 0,
+          sucursal_id: esAdmin && sucursalId ? Number(sucursalId) : undefined,
+        },
+      });
+
+      if (!Array.isArray(filas) || filas.length === 0) {
+        alert("No hay pods para imprimir con los filtros actuales.");
+        return;
+      }
+
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.srcdoc = planillaStockHtml(filas);
+
+      iframe.onload = () => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        // se saca después de imprimir; el diálogo ya tiene su propia copia
+        setTimeout(() => iframe.remove(), 1000);
+      };
+
+      document.body.appendChild(iframe);
+    } catch (e) {
+      console.error("Error al generar la planilla:", e);
+      alert("No se pudo generar la planilla.");
+    } finally {
+      setImprimiendo(false);
+    }
+  };
+
   return (
     <div className="mt-4" style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1rem" }}>
 
@@ -171,6 +218,15 @@ export default function PodsPorSucursalPage() {
             onClick={handleBuscar}
           >
             Buscar
+          </button>
+          <button
+            className="btn fw-medium mb-1"
+            style={{ background: "#0f766e", color: "#fff", border: "1px solid #14b8a6", borderRadius: "8px", whiteSpace: "nowrap" }}
+            onClick={imprimirPlanilla}
+            disabled={imprimiendo}
+            title="Planilla en A4 para contar el stock a mano"
+          >
+            {imprimiendo ? "Generando..." : "🖨 Planilla de control"}
           </button>
         </div>
       </div>
