@@ -113,10 +113,7 @@ export default function ResumenCostosCentral() {
     },
     {
       label: "Margen general",
-      value:
-        totales.total_facturado > 0
-          ? fmtPct((totales.ganancia_real / totales.total_facturado) * 100)
-          : fmtPct(null),
+      value: fmtPct(totales.margen_real_pct),
       color: "#6366f1",
     },
   ];
