@@ -42,6 +42,11 @@ function username(email = "") {
   return email.split("@")[0];
 }
 
+/** Nombre para mostrar. Cae al usuario del mail si no tiene nombre cargado. */
+function etiqueta(v = {}) {
+  return (v.nombre || "").trim() || username(v.email || "");
+}
+
 // ─── Semana ISO actual ────────────────────────────────────────────────────────
 
 function getSemanaActual() {
@@ -98,6 +103,156 @@ function DesgloseSucursales({ sucursales }) {
   );
 }
 
+// ─── Panel rendición ──────────────────────────────────────────────────────────
+
+// Lunes de la semana de `d`, que es como se cuentan las semanas acá
+const lunesDe = (d) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+const masDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const aISO = (d) => d.toISOString().slice(0, 10);
+const diaCorto = (iso) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit" });
+
+/**
+ * Compara, día por día, lo que vendió cada vendedor contra lo que rindió.
+ * El total de la semana no alcanza para darse cuenta de un comprobante que
+ * quedó sin mandar: suelen pagar al día siguiente, así que sobre el total se
+ * compensa y el faltante queda tapado.
+ */
+function PanelRendicion() {
+  const [ancla, setAncla] = useState(new Date());
+  const [datos, setDatos] = useState(null);
+  const [cargando, setCargando] = useState(true);
+
+  const desde = aISO(lunesDe(ancla));
+  const hasta = aISO(masDias(lunesDe(ancla), 7));
+
+  useEffect(() => {
+    let vivo = true;
+    setCargando(true);
+    axios
+      .get(`/vendedores/conciliacion?desde=${desde}&hasta=${hasta}`)
+      .then(({ data }) => { if (vivo) setDatos(data); })
+      .catch(() => { if (vivo) setDatos(null); })
+      .finally(() => { if (vivo) setCargando(false); });
+    return () => { vivo = false; };
+  }, [desde, hasta]);
+
+  const conMovimiento = (datos?.vendedores || []).filter((v) => v.detalle.length > 0);
+  const btn = { background: "#111827", border: "1px solid #1e293b", color: "#cbd5e1",
+    borderRadius: 8, padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" };
+
+  return (
+    <div>
+      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <button style={btn} onClick={() => setAncla(masDias(ancla, -7))}>← Semana anterior</button>
+        <span style={{ color: "#e2e8f0", fontWeight: 600 }}>
+          {diaCorto(desde)} al {diaCorto(aISO(masDias(lunesDe(ancla), 6)))}
+        </span>
+        <button style={btn} onClick={() => setAncla(masDias(ancla, 7))}>Semana siguiente →</button>
+        <button style={btn} onClick={() => setAncla(new Date())}>Esta semana</button>
+      </div>
+
+      {cargando && <div style={{ color: "#94a3b8" }}>Cargando…</div>}
+      {!cargando && conMovimiento.length === 0 && (
+        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12,
+          padding: 18, color: "#64748b" }}>
+          Ningún vendedor tuvo movimiento esta semana.
+        </div>
+      )}
+
+      {!cargando && conMovimiento.map((v) => (
+        <div key={v.id} style={{ background: "#0f172a", border: "1px solid #1e293b",
+          borderRadius: 12, padding: "16px 20px", marginBottom: 14,
+          borderLeft: v.falta > 0 ? "3px solid #f87171" : "3px solid #10b981" }}>
+          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <div style={{ color: "#f1f5f9", fontWeight: 700 }}>{etiqueta(v)}</div>
+              <div style={{ color: "#64748b", fontSize: "0.78rem" }}>
+                {v.unidades} unidades vendidas en la semana
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              {v.falta > 0 ? (
+                <>
+                  <div style={{ color: "#f87171", fontWeight: 700, fontSize: "1.1rem" }}>
+                    Falta {fmt(v.falta)}
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: "0.74rem" }}>sin rendir</div>
+                </>
+              ) : (
+                <div style={{ color: "#10b981", fontWeight: 700 }}>Al día</div>
+              )}
+              {v.pendiente > 0 && (
+                <div style={{ color: "#fbbf24", fontSize: "0.74rem", marginTop: 2 }}>
+                  {fmt(v.pendiente)} esperando que lo apruebes
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* El arrastre explica por qué un día puede tener un pago sin venta */}
+          {Math.abs(v.arrastre) > 0 && (
+            <div style={{ color: "#64748b", fontSize: "0.76rem", marginTop: 8 }}>
+              Venía debiendo {fmt(v.arrastre)} de antes de esta semana.
+            </div>
+          )}
+
+          <div style={{ overflowX: "auto", marginTop: 12 }}>
+            <table style={{ width: "100%", minWidth: 520, fontSize: "0.84rem" }}>
+              <thead>
+                <tr style={{ color: "#64748b", fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>Día</th>
+                  <th style={{ textAlign: "right", paddingBottom: 8 }}>Unid.</th>
+                  <th style={{ textAlign: "right", paddingBottom: 8 }}>Vendió</th>
+                  <th style={{ textAlign: "right", paddingBottom: 8 }}>Rindió</th>
+                  <th style={{ textAlign: "left", paddingBottom: 8, paddingLeft: 14 }}>Cómo</th>
+                  <th style={{ textAlign: "right", paddingBottom: 8 }}>Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                {v.detalle.map((d) => (
+                  <tr key={d.dia} style={{ borderTop: "1px solid #1e293b" }}>
+                    <td style={{ color: "#e2e8f0", padding: "8px 0", textTransform: "capitalize" }}>
+                      {diaCorto(d.dia)}
+                    </td>
+                    <td style={{ color: "#94a3b8", textAlign: "right" }}>{d.unidades || "—"}</td>
+                    <td style={{ color: "#e2e8f0", textAlign: "right" }}>{fmt(d.vendido)}</td>
+                    <td style={{ color: "#10b981", textAlign: "right" }}>{fmt(d.pagado)}</td>
+                    <td style={{ color: "#64748b", fontSize: "0.76rem", paddingLeft: 14 }}>
+                      {d.pagos_cargados === 0 ? "—" : (
+                        <>
+                          {d.comprobantes > 0 && `${d.comprobantes} con comprobante`}
+                          {d.comprobantes > 0 && d.pagos_cargados - d.comprobantes > 0 && " · "}
+                          {d.pagos_cargados - d.comprobantes > 0 &&
+                            `${d.pagos_cargados - d.comprobantes} cargado a mano`}
+                        </>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 600,
+                      color: d.diferencia > 0 ? "#f87171" : d.diferencia < 0 ? "#38bdf8" : "#475569" }}>
+                      {d.diferencia === 0 ? "—" : fmt(d.diferencia)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ color: "#475569", fontSize: "0.74rem", marginTop: 10, lineHeight: 1.5 }}>
+            En rojo, lo que vendió y todavía no rindió ese día. En celeste, lo que pagó
+            de más, que suele ser una venta del día anterior.
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Panel deudas ─────────────────────────────────────────────────────────────
 
 function PanelDeudas() {
@@ -127,7 +282,7 @@ function PanelDeudas() {
   useEffect(() => { cargarDeudas(); }, [cargarDeudas]);
 
   const abrirPago = (v) => {
-    setPagoModal({ id: v.id, email: v.email });
+    setPagoModal({ id: v.id, email: v.email, nombre: v.nombre });
     setMonto("");
     setNotas("");
     setFecha(new Date().toISOString().slice(0, 10));
@@ -226,7 +381,7 @@ function PanelDeudas() {
                 <React.Fragment key={v.id}>
                   <tr style={{ borderColor: "#1e293b" }}>
                     <td style={{ padding: "12px 16px" }}>
-                      <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{username(v.email)}</span>
+                      <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{etiqueta(v)}</span>
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right", color: "#64748b" }}>
                       {fmt(v.total_facturado)}
@@ -349,7 +504,7 @@ function PanelDeudas() {
             <div className="mb-4">
               <h6 style={{ color: "#f1f5f9", fontWeight: 700, margin: 0 }}>Registrar pago</h6>
               <p style={{ color: "#10b981", fontSize: "0.88rem", margin: "4px 0 0", fontWeight: 600 }}>
-                {username(pagoModal.email)}
+                {etiqueta(pagoModal)}
               </p>
             </div>
 
@@ -427,7 +582,7 @@ function VendedorCard({ v, tab }) {
       <div className="d-flex justify-content-between align-items-start mb-3">
         <div>
           <p style={{ color: "#f1f5f9", fontWeight: 700, fontSize: "1rem", margin: 0 }}>
-            {username(v.email)}
+            {etiqueta(v)}
           </p>
           <p style={{ color: "#475569", fontSize: "0.75rem", margin: 0 }}>{v.email}</p>
         </div>
@@ -850,6 +1005,7 @@ export default function VendedoresStats() {
     { key: "semana",  label: "Semana",  activeColor: "#3b82f6" },
     { key: "mes",     label: "Mes",     activeColor: "#3b82f6" },
     { key: "deudas",  label: "Deudas",  activeColor: "#10b981" },
+    { key: "rendicion", label: "Rendición", activeColor: "#f59e0b" },
     { key: "detalle", label: "Detalle", activeColor: "#8b5cf6" },
   ];
 
@@ -890,6 +1046,9 @@ export default function VendedoresStats() {
 
       {/* Tab: deudas */}
       {tab === "deudas" && <PanelDeudas />}
+
+      {/* Tab: rendición — qué vendió contra qué rindió, día por día */}
+      {tab === "rendicion" && <PanelRendicion />}
 
       {/* Tab: detalle */}
       {tab === "detalle" && (
