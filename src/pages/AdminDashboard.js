@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import TablaValorStockSucursal from "../components/TablaValorStockSucursal";
 import ResumenFinancieroSucursal from "../components/ResumenFinancieroSucursal";
+import DeudaVendedores from "../components/DeudaVendedores";
 import VentasMensuales from "../components/VentasMensuales";
 import FormularioPagoSucursal from "../components/FormularioPagoSucursal";
 import ProductoEditorMasivo from "./ProductoEditorMasivo";
@@ -114,6 +115,17 @@ function AdminDashboard() {
           <div style={cardStyle}>
             <p style={sectionLabelStyle}>Resumen financiero por sucursal</p>
             <ResumenFinancieroSucursal recargar={recargarResumen} />
+          </div>
+        </div>
+      </div>
+
+      {/* Deuda de vendedores: va aparte porque sus pagos se guardan sin
+          sucursal y el resumen por sucursal no los ve. */}
+      <div className="row mb-4">
+        <div className="col-12">
+          <div style={cardStyle}>
+            <p style={sectionLabelStyle}>Deuda por vendedor</p>
+            <DeudaVendedores recargar={recargarResumen} />
           </div>
         </div>
       </div>
