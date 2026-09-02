@@ -46,8 +46,10 @@ function VentasMensuales() {
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : [];
         setVentas(data);
-        if (data.length > 0) {
-          const max = data.reduce((a, b) =>
+        // El top es entre sucursales: un vendedor no compite en ese ranking
+        const soloSucursales = data.filter((v) => v.tipo !== "vendedor");
+        if (soloSucursales.length > 0) {
+          const max = soloSucursales.reduce((a, b) =>
             Number(a.total_ventas) > Number(b.total_ventas) ? a : b
           );
           setMayorSucursal(max);
@@ -68,10 +70,14 @@ function VentasMensuales() {
     [ventas]
   );
 
-  const cantidadSucursales = ventas.length;
-  const sucursalesConVenta = useMemo(
-    () => ventas.filter((v) => Number(v.total_ventas) > 0).length,
+  const soloSucursales = useMemo(
+    () => ventas.filter((v) => v.tipo !== "vendedor"),
     [ventas]
+  );
+  const cantidadSucursales = soloSucursales.length;
+  const sucursalesConVenta = useMemo(
+    () => soloSucursales.filter((v) => Number(v.total_ventas) > 0).length,
+    [soloSucursales]
   );
 
   const nf = new Intl.NumberFormat("es-AR");
@@ -188,6 +194,22 @@ function VentasMensuales() {
                 <tr key={i}>
                   <td style={tdStyle}>
                     {v.sucursal}
+                    {v.tipo === "vendedor" && (
+                      <span
+                        style={{
+                          marginLeft: 8,
+                          background: "#7c3aed",
+                          color: "#fff",
+                          fontSize: "0.62rem",
+                          padding: "1px 6px",
+                          borderRadius: 6,
+                          verticalAlign: "middle",
+                        }}
+                        title="Vendedor: sus ventas ya no se suman dentro de la sucursal"
+                      >
+                        vendedor
+                      </span>
+                    )}
                     {mayorSucursal?.sucursal === v.sucursal && (
                       <span
                         style={{
