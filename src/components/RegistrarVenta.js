@@ -368,7 +368,7 @@ function RegistrarVenta() {
         {/* Sucursal */}
         <div className="mb-4">
           <label style={lStyle}>Sucursal</label>
-          {(rol === "admin" || rol === "vendedor") ? (
+          {rol === "admin" ? (
             <select className="form-select" style={iStyle} value={sucursalId}
               onChange={(e) => setSucursalId(e.target.value)}
               required disabled={loadingSucursales || loadingVenta}>
@@ -381,9 +381,9 @@ function RegistrarVenta() {
             <input type="text" className="form-control" style={{ ...iStyle, opacity: 0.6 }}
               value={sucursalNombre} disabled />
           )}
-          {rol === "vendedor" && sucursalId && (
+          {rol === "vendedor" && (
             <div className="mt-1" style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-              El stock se descontará de la sucursal seleccionada.
+              Vendés desde {sucursalNombre || "tu sucursal"}. El stock se descuenta de ahí.
             </div>
           )}
         </div>
