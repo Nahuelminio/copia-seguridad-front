@@ -103,17 +103,20 @@ export default function ResumenCostosCentral() {
     },
     {
       label: "Facturado (mes actual)",
-      value: fmt(totales.total_vendido),
+      value: fmt(totales.total_facturado),
       color: "#10b981",
     },
     {
-      label: "Ganancia estimada",
-      value: fmt(totales.ganancia_estimada),
-      color: totales.ganancia_estimada >= 0 ? "#10b981" : "#f87171",
+      label: "Ganancia",
+      value: fmt(totales.ganancia_real),
+      color: totales.ganancia_real >= 0 ? "#10b981" : "#f87171",
     },
     {
       label: "Margen general",
-      value: fmtPct(totales.margen_pct),
+      value:
+        totales.total_facturado > 0
+          ? fmtPct((totales.ganancia_real / totales.total_facturado) * 100)
+          : fmtPct(null),
       color: "#6366f1",
     },
   ];
