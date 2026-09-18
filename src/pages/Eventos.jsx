@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "../utils/axiosInstance";
 import QrEvento from "../components/QrEvento";
+import ReciboEvento from "../components/ReciboEvento";
+import EntregaEvento from "../components/EntregaEvento";
 import "../styles/Eventos.css";
 
 // El catálogo del evento vive en el sitio público, no en el sistema.
@@ -103,6 +105,8 @@ export default function Eventos() {
   const [devoluciones, setDevoluciones] = useState({});
   const [cerrando, setCerrando] = useState(false);
   const [qr, setQr] = useState(null);   // { url, titulo, subtitulo }
+  const [recibo, setRecibo] = useState(null);   // rendición para entregarle a la fiesta
+  const [entrega, setEntrega] = useState(null); // remito de lo que se deja al empezar
   // Editar reusa el formulario de arriba: guarda el id y lo que ya tenía
   // asignado, para no contar dos veces el stock que ya salió de Central.
   const [editando, setEditando] = useState(null);
@@ -272,6 +276,27 @@ export default function Eventos() {
     }
   };
 
+  // Rendición de un evento ya cerrado: las devoluciones ya están guardadas,
+  // así que alcanza con el detalle del servidor.
+  const abrirRecibo = async (id) => {
+    try {
+      const res = await axios.get(`/eventos/${id}`);
+      setRecibo({ evento: res.data });
+    } catch {
+      aviso("No se pudo abrir la rendición", "error");
+    }
+  };
+
+  // Remito de lo que se le deja a la fiesta, para que cuenten contra un papel
+  const abrirEntrega = async (id) => {
+    try {
+      const res = await axios.get(`/eventos/${id}`);
+      setEntrega(res.data);
+    } catch {
+      aviso("No se pudo abrir el remito", "error");
+    }
+  };
+
   const cerrar = async () => {
     setCerrando(true);
     try {
@@ -279,9 +304,14 @@ export default function Eventos() {
         devoluciones: detalle.items.map((i) => ({
           item_id: i.id,
           cantidad: Number(devoluciones[i.id]) || 0,
+          directas: Number(devoluciones[`d${i.id}`]) || 0,
+          precio_directo: devoluciones[`p${i.id}`] ?? "",
         })),
       });
       aviso(`Cerrado: ${res.data.vendidas} unidades · ${fmt(res.data.neto)} para vos`);
+      // La rendición se abre sola: es el momento en que hay que arreglar con la
+      // fiesta, y así no hay que ir a buscarla después.
+      setRecibo({ evento: detalle, devoluciones: { ...devoluciones } });
       setDetalle(null);
       cargar();
     } catch (e) {
@@ -316,14 +346,21 @@ export default function Eventos() {
     const com = Number(detalle.comision_unidad) || 0;
     return detalle.items.reduce((acc, i) => {
       const vuelven = Number(devoluciones[i.id]) || 0;
-      const vendidas = i.cantidad_llevada - vuelven;
+      // Las pagadas directo a nosotros no las vendió la fiesta: no pagan
+      // comisión y no entran en lo que ella tiene que rendir.
+      const directas = Number(devoluciones[`d${i.id}`]) || 0;
+      const precioDir = Number(devoluciones[`p${i.id}`]) || Number(i.precio);
+      const vendidas = i.cantidad_llevada - vuelven - directas;
       return {
         vendidas: acc.vendidas + vendidas,
+        directas: acc.directas + directas,
         bruto: acc.bruto + vendidas * Number(i.precio),
+        directo: acc.directo + directas * precioDir,
         comision: acc.comision + vendidas * com,
-        neto: acc.neto + vendidas * (Number(i.precio) - com),
+        aRendir: acc.aRendir + vendidas * (Number(i.precio) - com),
+        neto: acc.neto + vendidas * (Number(i.precio) - com) + directas * precioDir,
       };
-    }, { vendidas: 0, bruto: 0, comision: 0, neto: 0 });
+    }, { vendidas: 0, directas: 0, bruto: 0, directo: 0, comision: 0, aRendir: 0, neto: 0 });
   }, [detalle, devoluciones]);
 
   return (
@@ -668,12 +705,18 @@ export default function Eventos() {
                   <a href={`${CATALOGO}/evento/${ev.slug}`} target="_blank" rel="noreferrer"
                     style={{ ...btn, textDecoration: "none" }}>Abrir</a>
                   <button onClick={() => editar(ev.id)} style={btn}>Editar</button>
+                  {/* Para imprimir y dejarle a la fiesta lo que se le entregó */}
+                  <button onClick={() => abrirEntrega(ev.id)} style={btn}>Remito</button>
                   <button onClick={() => abrirCierre(ev.id)} style={btnPrimario}>Cerrar</button>
                 </>
               )}
 
               {ev.estado === "cerrado" && (
-                <button onClick={() => reabrir(ev)} style={btn}>Reabrir</button>
+                <>
+                  <button onClick={() => abrirRecibo(ev.id)} style={btnPrimario}>Rendición</button>
+                  <button onClick={() => abrirEntrega(ev.id)} style={btn}>Remito</button>
+                  <button onClick={() => reabrir(ev)} style={btn}>Reabrir</button>
+                </>
               )}
               <button onClick={() => eliminar(ev)} style={btnPeligro}>Eliminar</button>
             </div>
@@ -686,6 +729,14 @@ export default function Eventos() {
                 { t: "Vendidas", v: ev.vendidas, c: "#e2e8f0" },
                 { t: "Recaudado", v: fmt(ev.bruto), c: "#e2e8f0" },
                 { t: "Para la fiesta", v: fmt(ev.comision), c: "#94a3b8" },
+                // Cuando hubo unidades pagadas directo, lo que rinde la fiesta
+                // y lo que te queda en total dejan de ser el mismo número.
+                ...(Number(ev.directas) > 0
+                  ? [
+                      { t: "Rinde la fiesta", v: fmt(ev.a_rendir), c: "#e2e8f0" },
+                      { t: "Directo a vos", v: fmt(ev.total_directo), c: "#38bdf8" },
+                    ]
+                  : []),
                 { t: "Te quedó", v: fmt(ev.neto), c: "#10b981" },
               ].map((x) => (
                 <div key={x.t}>
@@ -700,6 +751,9 @@ export default function Eventos() {
 
       {qr && <QrEvento {...qr} onClose={() => setQr(null)} />}
 
+      {recibo && <ReciboEvento {...recibo} onClose={() => setRecibo(null)} />}
+      {entrega && <EntregaEvento evento={entrega} onClose={() => setEntrega(null)} />}
+
       {/* ── Cierre ── */}
       {detalle && (
         <div onClick={() => setDetalle(null)}
@@ -712,34 +766,76 @@ export default function Eventos() {
             </div>
             <p style={{ color: "#64748b", fontSize: "0.8rem" }}>
               Cargá cuántas volvieron de cada modelo. Lo que no vuelve se toma como vendido
-              y las devoluciones se reingresan a Central.
+              y las devoluciones se reingresan a Central. Si alguna la pagaron directo a vos
+              (no la vendió la fiesta), cargala en <em>directo</em>: no paga comisión.
             </p>
+
+            <div className="d-flex justify-content-end gap-2"
+              style={{ ...label, marginBottom: 2, paddingRight: 90 }}>
+              <span style={{ width: 82, textAlign: "center" }}>vuelven</span>
+              <span style={{ width: 82, textAlign: "center" }}>directo</span>
+            </div>
 
             {detalle.items.map((i) => {
               const vuelven = Number(devoluciones[i.id]) || 0;
-              const vendidas = i.cantidad_llevada - vuelven;
+              const directas = Number(devoluciones[`d${i.id}`]) || 0;
+              const vendidas = i.cantidad_llevada - vuelven - directas;
+              const sobra = vendidas < 0;
               return (
-                <div key={i.id} className="d-flex justify-content-between align-items-center gap-2"
+                <div key={i.id}
                   style={{ padding: "10px 0", borderBottom: "1px solid #1e293b" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ color: "#e2e8f0", fontSize: "0.86rem" }}>
-                      {i.producto.trim()} — {i.gusto.trim()}
+                  <div className="d-flex justify-content-between align-items-center gap-2">
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: "#e2e8f0", fontSize: "0.86rem" }}>
+                        {i.producto.trim()} — {i.gusto.trim()}
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: "0.74rem" }}>
+                        Llevadas {i.cantidad_llevada} · {fmt(i.precio)} c/u
+                      </div>
                     </div>
-                    <div style={{ color: "#64748b", fontSize: "0.74rem" }}>
-                      Llevadas {i.cantidad_llevada} · {fmt(i.precio)} c/u
+                    <div className="d-flex align-items-center gap-2">
+                      <input type="number" min="0" max={i.cantidad_llevada}
+                        className="ev-in" placeholder="0"
+                        style={{ width: 82, textAlign: "right" }}
+                        value={devoluciones[i.id]}
+                        onChange={(e) => setDevoluciones({ ...devoluciones, [i.id]: e.target.value })} />
+                      <input type="number" min="0" max={i.cantidad_llevada}
+                        className="ev-in" placeholder="0"
+                        style={{ width: 82, textAlign: "right" }}
+                        value={devoluciones[`d${i.id}`] ?? ""}
+                        onChange={(e) =>
+                          setDevoluciones({ ...devoluciones, [`d${i.id}`]: e.target.value })} />
+                      <span style={{ color: sobra ? "#f87171" : vendidas > 0 ? "#10b981" : "#475569",
+                        fontSize: "0.78rem", minWidth: 82, textAlign: "right" }}>
+                        vende {vendidas}
+                      </span>
                     </div>
                   </div>
-                  <div className="d-flex align-items-center gap-2">
-                    <input type="number" min="0" max={i.cantidad_llevada}
-                      className="ev-in" placeholder="0"
-                      style={{ width: 82, textAlign: "right" }}
-                      value={devoluciones[i.id]}
-                      onChange={(e) => setDevoluciones({ ...devoluciones, [i.id]: e.target.value })} />
-                    <span style={{ color: vendidas > 0 ? "#10b981" : "#475569",
-                      fontSize: "0.78rem", minWidth: 82, textAlign: "right" }}>
-                      vende {vendidas}
-                    </span>
-                  </div>
+
+                  {/* El precio de la venta directa puede no ser el del catálogo:
+                      suele ser a un compañero y a otro valor. */}
+                  {directas > 0 && (
+                    <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
+                      <span style={{ color: "#64748b", fontSize: "0.74rem" }}>
+                        ¿A cuánto {directas === 1 ? "la" : "las"} pagaron?
+                      </span>
+                      <input type="number" min="0" className="ev-in"
+                        placeholder={String(Math.round(Number(i.precio)))}
+                        style={{ width: 110, textAlign: "right" }}
+                        value={devoluciones[`p${i.id}`] ?? ""}
+                        onChange={(e) =>
+                          setDevoluciones({ ...devoluciones, [`p${i.id}`]: e.target.value })} />
+                      <span style={{ color: "#475569", fontSize: "0.74rem", minWidth: 54, textAlign: "right" }}>
+                        c/u
+                      </span>
+                    </div>
+                  )}
+
+                  {sobra && (
+                    <div className="ev-hint pasado">
+                      Entre devueltas y pagadas directo suman más de las {i.cantidad_llevada} que se llevaron.
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -747,8 +843,17 @@ export default function Eventos() {
             <div className="d-flex justify-content-between align-items-center mt-3 pt-3"
               style={{ borderTop: "1px solid #1e293b" }}>
               <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
-                {resumenCierre.vendidas} vendidas · {fmt(resumenCierre.bruto)} en total ·{" "}
-                {fmt(resumenCierre.comision)} para la fiesta
+                {resumenCierre.vendidas} vendidas por la fiesta · {fmt(resumenCierre.bruto)} ·{" "}
+                {fmt(resumenCierre.comision)} de comisión
+                <div style={{ color: "#e2e8f0" }}>
+                  Te rinde <strong>{fmt(resumenCierre.aRendir)}</strong>
+                </div>
+                {resumenCierre.directas > 0 && (
+                  <div style={{ color: "#64748b" }}>
+                    + {resumenCierre.directas} pagada{resumenCierre.directas === 1 ? "" : "s"} directo
+                    a vos · {fmt(resumenCierre.directo)}
+                  </div>
+                )}
                 <div style={{ color: "#10b981", fontWeight: 700, fontSize: "0.95rem" }}>
                   {fmt(resumenCierre.neto)} para vos
                 </div>
