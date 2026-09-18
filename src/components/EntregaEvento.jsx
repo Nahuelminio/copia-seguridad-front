@@ -81,7 +81,7 @@ export default function EntregaEvento({ evento, onClose }) {
                 <tr>
                   <th style={{ ...th, textAlign: "left" }}>Producto</th>
                   <th style={th}>Precio</th>
-                  <th style={th}>Dejadas</th>
+                  <th style={th}>Entregadas</th>
                 </tr>
               </thead>
               <tbody>

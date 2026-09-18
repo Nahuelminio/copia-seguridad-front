@@ -179,7 +179,7 @@ export function htmlEntrega(evento, datos) {
       .modelo { font-weight: 600; }
       .puffs  { color: #999; font-size: 9.5px; margin-left: 3px; }
       .gusto  { color: #555; }
-      .dejadas { font-weight: 700; }
+      .entregadas { font-weight: 700; }
       /* Casillero vacío para que la fiesta escriba lo que contó */
       .control { border-left: 1px solid #ddd; width: 78px; }
       tfoot td { padding: 9px 8px 0; text-align: right; font-weight: 700;
@@ -219,7 +219,7 @@ export function htmlEntrega(evento, datos) {
       <table>
         <colgroup><col><col width="78"><col width="74"><col width="78"></colgroup>
         <thead><tr>
-          <th>Producto</th><th>Precio</th><th>Dejadas</th><th>Control</th>
+          <th>Producto</th><th>Precio</th><th>Entregadas</th><th>Control</th>
         </tr></thead>
         <tbody>
           ${datos.filas
@@ -229,7 +229,7 @@ export function htmlEntrega(evento, datos) {
                   f.k ? `<span class="puffs">${f.k}</span>` : ""
                 } <span class="gusto">· ${esc(f.gusto)}</span></td>
                 <td>${fmt(f.precio)}</td>
-                <td class="dejadas">${f.llevadas}</td>
+                <td class="entregadas">${f.llevadas}</td>
                 <td class="control"></td>
               </tr>`
             )
