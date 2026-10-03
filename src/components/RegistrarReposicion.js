@@ -80,6 +80,16 @@ function RegistrarReposicion() {
     fetchAll();
   }, []);
 
+  // El último dólar que usamos, para completar solo el USD al tipear el costo.
+  // Sale del tipo de cambio del último pedido mayorista confirmado.
+  const [dolar, setDolar] = useState(null);
+  const [usdAutomatico, setUsdAutomatico] = useState(false);
+  useEffect(() => {
+    axios.get("/costos-central/dolar")
+      .then(r => setDolar(Number(r.data?.dolar) || null))
+      .catch(() => setDolar(null));
+  }, []);
+
   // Cuando cambia la sucursal, carga el stock de esa sucursal para mostrar cantidades
   useEffect(() => {
     if (!form.sucursal_id) { setStockSucursal([]); return; }
@@ -100,6 +110,20 @@ function RegistrarReposicion() {
       setMostrarSinStock(true);
       return;
     }
+    // Al tipear el costo en pesos se completa el USD solo, con el dólar de hoy.
+    // Solo si el USD está vacío: si ya pusiste el de la factura, ese manda.
+    if (name === "precio_costo" && dolar > 0) {
+      setForm((prev) => {
+        if (prev.precio_costo_usd !== "" && !usdAutomatico) return { ...prev, precio_costo: value };
+        const n = Number(value);
+        if (!(n > 0)) { setUsdAutomatico(false); return { ...prev, precio_costo: value, precio_costo_usd: "" }; }
+        setUsdAutomatico(true);
+        return { ...prev, precio_costo: value, precio_costo_usd: (n / dolar).toFixed(2) };
+      });
+      return;
+    }
+    // Si lo tocás a mano deja de ser automático y no se vuelve a pisar
+    if (name === "precio_costo_usd") setUsdAutomatico(false);
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -250,6 +274,7 @@ function RegistrarReposicion() {
       await axios.post("/reposicion", payload);
       toast.success("Reposición registrada correctamente");
       setForm((prev) => ({ ...prev, gusto_id: "", cantidad: "", precio_costo: "", precio_costo_usd: "" }));
+      setUsdAutomatico(false);
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
@@ -557,10 +582,16 @@ function RegistrarReposicion() {
               onChange={handleChange}
               min="0"
               step="0.01"
-              placeholder="¿Cuántos USD por unidad?"
+              placeholder={dolar > 0 ? "Se completa solo con el costo en pesos" : "¿Cuántos USD por unidad?"}
               disabled={!form.gusto_id || loadingSubmit}
               style={iStyle}
             />
+            {usdAutomatico && form.precio_costo_usd !== "" && (
+              <div style={{ fontSize: "0.75rem", color: "#38bdf8", marginTop: 4 }}>
+                Calculado con el dólar a ${Number(dolar).toLocaleString("es-AR")}. Si la
+                factura dice otro número, cambialo.
+              </div>
+            )}
             {form.precio_costo !== "" && Number(form.precio_costo_usd) > 0 && (
               <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
                 Te tomó el dólar a{" "}

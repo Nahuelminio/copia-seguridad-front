@@ -117,9 +117,10 @@ function ListaCostosModal({ onClose }) {
     a.unidades += stock;
     a.ars += stock * (Number(x.costo_ultimo) || 0);
     if (x.usd_ultimo != null) a.usd += stock * Number(x.usd_ultimo);
+    else if (x.usd_estimado != null) { a.usd += stock * Number(x.usd_estimado); a.estimados += 1; }
     else a.sinUsd += 1;
     return a;
-  }, { modelos: 0, unidades: 0, ars: 0, usd: 0, sinUsd: 0 });
+  }, { modelos: 0, unidades: 0, ars: 0, usd: 0, sinUsd: 0, estimados: 0 });
 
   const th = { ...label, padding: "8px 10px", borderBottom: "1px solid #1e293b", whiteSpace: "nowrap" };
   const td = { padding: "10px", borderBottom: "1px solid #1e293b", color: "#e2e8f0", verticalAlign: "middle" };
@@ -153,12 +154,26 @@ function ListaCostosModal({ onClose }) {
 
   const botonUsd = (x) => {
     const usdVaria = x.usd_min != null && Number(x.usd_min) !== Number(x.usd_max);
+    // El calculado va en gris y con "≈": es el costo en pesos dividido por el
+    // dólar de ese día, no lo que dice la factura del proveedor.
+    const estimado = x.usd_ultimo == null && x.usd_estimado != null;
     return (
       <button
-        onClick={() => { setEditando(x.producto_id); setUsd(x.usd_ultimo ?? ""); setModoUsd("faltantes"); }}
-        title="Cargar o corregir el costo en USD"
-        style={{ background: "transparent", border: "1px dashed #334155", borderRadius: 6, padding: "3px 8px", cursor: "pointer", whiteSpace: "nowrap", color: x.usd_ultimo != null ? "#38bdf8" : "#475569", fontWeight: x.usd_ultimo != null ? 700 : 400 }}>
-        {x.usd_ultimo != null ? fmtUsd(x.usd_ultimo) : "cargar"}
+        onClick={() => { setEditando(x.producto_id); setUsd(x.usd_ultimo ?? x.usd_estimado ?? ""); setModoUsd("faltantes"); }}
+        title={estimado
+          ? "Calculado con el dólar del día de la compra. Tocá para cargar el valor real."
+          : "Cargar o corregir el costo en USD"}
+        style={{ background: "transparent", border: "1px dashed #334155", borderRadius: 6, padding: "3px 8px", cursor: "pointer", whiteSpace: "nowrap", color: x.usd_ultimo != null ? "#38bdf8" : estimado ? "#94a3b8" : "#475569", fontWeight: x.usd_ultimo != null ? 700 : 400 }}>
+        {x.usd_ultimo != null
+          ? fmtUsd(x.usd_ultimo)
+          : estimado
+          ? `≈ ${fmtUsd(x.usd_estimado)}`
+          : "cargar"}
+        {estimado && (
+          <div style={{ color: "#475569", fontSize: "0.68rem", fontWeight: 400 }}>
+            calculado
+          </div>
+        )}
         {usdVaria && (
           <div style={{ color: "#f59e0b", fontSize: "0.68rem", fontWeight: 400 }}>
             varió {fmtUsd(x.usd_min)}–{fmtUsd(x.usd_max)}
@@ -166,9 +181,9 @@ function ListaCostosModal({ onClose }) {
         )}
         {/* A qué dólar salió la última compra que tiene los dos valores: si
             quedó lejos del de hoy, el costo en pesos está viejo. */}
-        {x.usd_ultimo != null && x.dolar_ultimo > 0 && (
+        {(x.usd_ultimo != null ? x.dolar_ultimo : x.dolar_del_costo) > 0 && (
           <div style={{ color: "#64748b", fontSize: "0.68rem", fontWeight: 400 }}>
-            dólar a {fmt(x.dolar_ultimo)}
+            dólar a {fmt(x.usd_ultimo != null ? x.dolar_ultimo : x.dolar_del_costo)}
           </div>
         )}
         {/* Cuántas compras del modelo siguen sin USD: mientras queden, el total
@@ -224,9 +239,14 @@ function ListaCostosModal({ onClose }) {
                   <>
                     {" "}≈{" "}
                     <strong style={{ color: "#38bdf8" }}>{fmtUsd(Math.round(resumen.usd))}</strong>
+                    {resumen.estimados > 0 && (
+                      <span style={{ color: "#64748b" }}>
+                        {" "}({resumen.estimados} de {resumen.modelos} modelos con el USD calculado)
+                      </span>
+                    )}
                     {resumen.sinUsd > 0 && (
                       <span style={{ color: "#f59e0b" }}>
-                        {" "}(sin contar {resumen.sinUsd} modelos sin USD cargado)
+                        {" "}(sin contar {resumen.sinUsd} modelos sin USD)
                       </span>
                     )}
                   </>
@@ -356,7 +376,9 @@ function ListaCostosModal({ onClose }) {
         </div>
 
         <div style={{ padding: "10px 22px", borderTop: "1px solid #1e293b", color: "#64748b", fontSize: "0.75rem" }}>
-          El USD se guarda en cada reposición nueva. Tocá el valor para cargarlo o corregirlo en las compras ya hechas.
+          Los que dicen <span style={{ color: "#94a3b8" }}>≈ calculado</span> salen del costo en
+          pesos dividido por el dólar de ese día; los azules son el valor que cargaste vos y
+          mandan sobre el cálculo. Tocá cualquiera para corregirlo.
         </div>
       </div>
     </div>
