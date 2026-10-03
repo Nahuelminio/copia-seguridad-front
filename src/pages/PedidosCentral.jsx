@@ -291,6 +291,33 @@ export default function PedidosCentral() {
                             </td>
                             {detalle[pedido.id] && <td />}
                           </tr>
+                          {/* Lo que costó la mercadería del pedido. Sale de las
+                              reposiciones reales, igual que en Métricas. */}
+                          {Number(pedido.costo_total) > 0 && (
+                            <>
+                              <tr>
+                                <td colSpan={3} style={{ padding: "4px 0", color: "#64748b", fontSize: "0.8rem" }}>
+                                  Costo de la mercadería
+                                </td>
+                                <td style={{ padding: "4px 0", textAlign: "right", color: "#f87171", fontSize: "0.85rem" }}>
+                                  {fmt(pedido.costo_total)}
+                                </td>
+                                {detalle[pedido.id] && <td />}
+                              </tr>
+                              <tr>
+                                <td colSpan={3} style={{ padding: "4px 0", color: "#64748b", fontSize: "0.8rem" }}>
+                                  Ganancia
+                                  {pedido.margen_pct != null && (
+                                    <span style={{ color: "#475569" }}> · {pedido.margen_pct}%</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: "4px 0", textAlign: "right", color: "#4ade80", fontWeight: 700, fontSize: "0.85rem" }}>
+                                  {fmt(pedido.ganancia)}
+                                </td>
+                                {detalle[pedido.id] && <td />}
+                              </tr>
+                            </>
+                          )}
                         </tfoot>
                       )}
                     </table>

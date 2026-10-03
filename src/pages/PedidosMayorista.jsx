@@ -4,6 +4,7 @@ import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import FacturaMayorista from "../components/FacturaMayorista";
+import { getUsuario } from "../utils/auth";
 
 function useConfirm() {
   const [state, setState] = useState({ show: false, title: "", message: "", resolve: null });
@@ -91,13 +92,47 @@ function DetallePedido({ pedidoId, onVolver }) {
   if (cargando) return <p className="text-center text-muted mt-5">Cargando…</p>;
   if (!pedido) return null;
 
+  // El costo va FUERA de la factura: esa hoja es la que ve el cliente.
+  const esAdmin = (getUsuario()?.rol || "").toLowerCase() === "admin";
+  const facturado = Number(pedido.total_ars) || 0;
+  const costo = Number(pedido.costo_total) || 0;
+
   return (
+    <>
+      {esAdmin && costo > 0 && (
+        <div
+          className="mx-auto mb-3 d-flex flex-wrap"
+          style={{
+            maxWidth: 900, gap: 24, background: "#0f172a",
+            border: "1px solid #1e293b", borderRadius: 12, padding: "14px 18px",
+          }}
+        >
+          {[
+            ["Facturado", `$ ${facturado.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`, "#e2e8f0"],
+            ["Costo de la mercadería", `$ ${costo.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`, "#f87171"],
+            ["Ganancia", `$ ${(facturado - costo).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`, "#4ade80"],
+            ["Margen", pedido.margen_pct == null ? "—" : `${pedido.margen_pct}%`, "#38bdf8"],
+            ["Unidades", String(pedido.unidades ?? "—"), "#94a3b8"],
+          ].map(([t, v2, c]) => (
+            <div key={t}>
+              <div style={{ color: "#64748b", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                {t}
+              </div>
+              <div style={{ color: c, fontWeight: 700, fontSize: "1.05rem" }}>{v2}</div>
+            </div>
+          ))}
+          <div style={{ color: "#475569", fontSize: "0.72rem", alignSelf: "flex-end" }}>
+            Esto no sale en la factura del cliente
+          </div>
+        </div>
+      )}
     <FacturaMayorista
       pedido={pedido}
       pedidoId={pedidoId}
       modoVer={pedido.estado !== "pendiente"}
       onVolver={onVolver}
     />
+    </>
   );
 }
 
@@ -273,6 +308,8 @@ export default function PedidosMayorista() {
                 <th>Fecha</th>
                 <th className="text-end">Total USD</th>
                 <th className="text-end">Total ARS</th>
+                <th className="text-end">Costo</th>
+                <th className="text-end">Ganancia</th>
                 <th className="text-center">Estado</th>
                 <th></th>
               </tr>
@@ -295,6 +332,28 @@ export default function PedidosMayorista() {
                       : p.tipo_cambio > 0
                         ? `$ ${(p.total_usd * p.tipo_cambio).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
                         : "—"}
+                  </td>
+                  <td className="text-end" style={{ color: "#f87171", fontSize: "0.88rem" }}>
+                    {Number(p.costo_total) > 0
+                      ? `$ ${Number(p.costo_total).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
+                      : "—"}
+                  </td>
+                  <td className="text-end">
+                    {(() => {
+                      const facturado = Number(p.total_ars) || 0;
+                      const costo = Number(p.costo_total) || 0;
+                      if (!facturado || !costo) return <span style={{ color: "#64748b" }}>—</span>;
+                      const g = facturado - costo;
+                      const pct = ((g / facturado) * 100).toFixed(1);
+                      return (
+                        <>
+                          <div className="fw-semibold" style={{ color: g >= 0 ? "#4ade80" : "#f87171" }}>
+                            $ {g.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                          </div>
+                          <div style={{ color: "#64748b", fontSize: "0.78rem" }}>{pct}%</div>
+                        </>
+                      );
+                    })()}
                   </td>
                   <td className="text-center">
                     <span className={`badge ${BADGE[p.estado] || "bg-secondary"}`}>

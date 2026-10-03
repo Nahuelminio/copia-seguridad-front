@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import CostosPedidos from "../components/CostosPedidos";
 import axios from "../utils/axiosInstance";
 
 const card = {
@@ -417,6 +418,15 @@ export default function CostosCentral() {
       </div>
 
       {verLista && <ListaCostosModal onClose={() => setVerLista(false)} />}
+
+      {/* Costo de cada pedido y de cada compra. Tiene su propio rango de
+          fechas porque se mira otra cosa: acá interesa pedido por pedido. */}
+      <div style={card} className="mb-4">
+        <p style={{ color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 14 }}>
+          Costo por pedido y por compra
+        </p>
+        <CostosPedidos />
+      </div>
 
       {/* Filtros */}
       <div style={card} className="mb-4">
