@@ -52,11 +52,15 @@ const fmtUsd = (n) => (n != null ? `USD ${Number(n).toLocaleString("es-AR", { ma
  * Lista de costos por modelo. El costo en pesos se mueve con el dólar de cada
  * compra, así que se muestra el de la última reposición con el rango histórico
  * al lado; el USD es lo que cobra el proveedor y debería quedarse quieto.
+ *
+ * Viene ordenada por el stock de hoy en la Central: lo que tengo para vender es
+ * lo que uno viene a mirar. Lo agotado queda al final, detrás de un separador.
  */
 function ListaCostosModal({ onClose }) {
   const [lista, setLista] = useState(null);
   const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("");
+  const [soloConStock, setSoloConStock] = useState(true);
   const [editando, setEditando] = useState(null);   // producto_id
   const [usd, setUsd] = useState("");
   const [modoUsd, setModoUsd] = useState("faltantes");
@@ -100,7 +104,22 @@ function ListaCostosModal({ onClose }) {
   };
 
   const visibles = (lista || []).filter(x =>
-    x.modelo.toLowerCase().includes(filtro.trim().toLowerCase()));
+    x.modelo.toLowerCase().includes(filtro.trim().toLowerCase()) &&
+    (!soloConStock || Number(x.stock) > 0));
+
+  // Qué tengo hoy en la Central, valuado al costo de la última compra. El USD
+  // solo cuenta los modelos que lo tienen cargado, así que puede quedar corto:
+  // por eso se dice cuántos faltan en vez de dar un número que miente.
+  const resumen = (lista || []).reduce((a, x) => {
+    const stock = Number(x.stock) || 0;
+    if (stock <= 0) return a;
+    a.modelos += 1;
+    a.unidades += stock;
+    a.ars += stock * (Number(x.costo_ultimo) || 0);
+    if (x.usd_ultimo != null) a.usd += stock * Number(x.usd_ultimo);
+    else a.sinUsd += 1;
+    return a;
+  }, { modelos: 0, unidades: 0, ars: 0, usd: 0, sinUsd: 0 });
 
   const th = { ...label, padding: "8px 10px", borderBottom: "1px solid #1e293b", whiteSpace: "nowrap" };
   const td = { padding: "10px", borderBottom: "1px solid #1e293b", color: "#e2e8f0", verticalAlign: "middle" };
@@ -145,12 +164,43 @@ function ListaCostosModal({ onClose }) {
             varió {fmtUsd(x.usd_min)}–{fmtUsd(x.usd_max)}
           </div>
         )}
+        {/* A qué dólar salió la última compra que tiene los dos valores: si
+            quedó lejos del de hoy, el costo en pesos está viejo. */}
+        {x.usd_ultimo != null && x.dolar_ultimo > 0 && (
+          <div style={{ color: "#64748b", fontSize: "0.68rem", fontWeight: 400 }}>
+            dólar a {fmt(x.dolar_ultimo)}
+          </div>
+        )}
+        {/* Cuántas compras del modelo siguen sin USD: mientras queden, el total
+            en dólares del stock sale corto. */}
+        {x.usd_ultimo != null && Number(x.sin_usd) > 0 && (
+          <div style={{ color: "#475569", fontSize: "0.68rem", fontWeight: 400 }}>
+            faltan {x.sin_usd} de {x.repos_total}
+          </div>
+        )}
       </button>
     );
   };
 
   const subtitulo = (x) =>
     `${x.sabores} sabores${Number(x.sin_costo) > 0 ? ` · ${x.sin_costo} compras sin costo` : ""}`;
+
+  /** El stock de hoy, que es distinto de todo lo que se compró alguna vez. */
+  const celdaStock = (x) => {
+    const s = Number(x.stock) || 0;
+    return (
+      <div>
+        <div style={{ color: s > 0 ? "#4ade80" : "#475569", fontWeight: s > 0 ? 700 : 400 }}>
+          {s > 0 ? s : "0"}
+        </div>
+        {s > 0 && x.costo_ultimo != null && (
+          <div style={{ color: "#64748b", fontSize: "0.7rem" }}>
+            {fmt(s * Number(x.costo_ultimo))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div onClick={onClose}
@@ -164,6 +214,25 @@ function ListaCostosModal({ onClose }) {
             <div style={{ color: "#64748b", fontSize: "0.78rem" }}>
               Costo de la última compra, con el rango histórico al lado
             </div>
+            {lista && resumen.modelos > 0 && (
+              <div style={{ color: "#94a3b8", fontSize: "0.78rem", marginTop: 4 }}>
+                En la Central hay{" "}
+                <strong style={{ color: "#e2e8f0" }}>{resumen.unidades} unidades</strong> de{" "}
+                {resumen.modelos} modelos, que a costo son{" "}
+                <strong style={{ color: "#e2e8f0" }}>{fmt(resumen.ars)}</strong>
+                {resumen.usd > 0 && (
+                  <>
+                    {" "}≈{" "}
+                    <strong style={{ color: "#38bdf8" }}>{fmtUsd(Math.round(resumen.usd))}</strong>
+                    {resumen.sinUsd > 0 && (
+                      <span style={{ color: "#f59e0b" }}>
+                        {" "}(sin contar {resumen.sinUsd} modelos sin USD cargado)
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <button onClick={onClose}
             style={{ background: "#0f172a", border: "1px solid #1e293b", color: "#94a3b8", borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}>
@@ -171,10 +240,16 @@ function ListaCostosModal({ onClose }) {
           </button>
         </div>
 
-        <div style={{ padding: "12px 22px", borderBottom: "1px solid #1e293b" }}>
+        <div style={{ padding: "12px 22px", borderBottom: "1px solid #1e293b", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <input type="text" className="form-control form-control-sm" placeholder="Buscar modelo... (ej: ice king)"
-            style={{ background: "#0f172a", border: "1px solid #1e293b", color: "#e2e8f0", borderRadius: 8 }}
+            style={{ background: "#0f172a", border: "1px solid #1e293b", color: "#e2e8f0", borderRadius: 8, flex: 1, minWidth: 180 }}
             value={filtro} onChange={e => setFiltro(e.target.value)} autoFocus />
+          {/* Arranca en "con stock": lo agotado es historia, no lo que vendo hoy */}
+          <label style={{ color: soloConStock ? "#e2e8f0" : "#64748b", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={soloConStock}
+              onChange={e => setSoloConStock(e.target.checked)} />
+            Solo con stock
+          </label>
         </div>
 
         {error && <div className="alert alert-danger m-3 mb-0 py-2" style={{ fontSize: "0.85rem" }}>{error}</div>}
@@ -186,7 +261,11 @@ function ListaCostosModal({ onClose }) {
 
           {lista && visibles.length === 0 && (
             <div style={{ color: "#64748b", textAlign: "center", padding: "40px 0" }}>
-              {filtro ? "Ningún modelo coincide" : "No hay reposiciones cargadas en la Central"}
+              {filtro
+                ? `Ningún modelo coincide${soloConStock ? " entre los que tienen stock" : ""}`
+                : soloConStock
+                ? "No hay nada con stock en la Central. Destildá «Solo con stock» para ver el historial."
+                : "No hay reposiciones cargadas en la Central"}
             </div>
           )}
 
@@ -196,8 +275,13 @@ function ListaCostosModal({ onClose }) {
                 {visibles.map(x => {
                   const varia = x.costo_min != null && Number(x.costo_min) !== Number(x.costo_max);
                   return (
-                    <div key={x.producto_id} style={{ padding: "14px 16px", borderBottom: "1px solid #1e293b" }}>
-                      <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: "0.92rem" }}>{x.modelo.trim()}</div>
+                    <div key={x.producto_id} style={{ padding: "14px 16px", borderBottom: "1px solid #1e293b", opacity: Number(x.stock) > 0 ? 1 : 0.55 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                        <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: "0.92rem" }}>{x.modelo.trim()}</div>
+                        <div style={{ color: Number(x.stock) > 0 ? "#4ade80" : "#475569", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {Number(x.stock) > 0 ? `${x.stock} en stock` : "sin stock"}
+                        </div>
+                      </div>
                       <div style={{ color: "#64748b", fontSize: "0.74rem", marginBottom: 10 }}>{subtitulo(x)}</div>
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
@@ -221,34 +305,48 @@ function ListaCostosModal({ onClose }) {
               <thead style={{ position: "sticky", top: 0, background: "#111827" }}>
                 <tr>
                   <th style={th}>Modelo</th>
+                  <th style={{ ...th, textAlign: "right" }}>Stock</th>
                   {/* Ancho fijo: el editor inline es más ancho que el valor y
                       sin esto se desborda sobre la columna del modelo. */}
                   <th style={{ ...th, textAlign: "right", width: 165, minWidth: 165 }}>USD</th>
                   <th style={{ ...th, textAlign: "right" }}>Costo $</th>
                   <th style={{ ...th, textAlign: "right" }}>Rango $</th>
-                  <th style={{ ...th, textAlign: "right" }}>Unid.</th>
+                  <th style={{ ...th, textAlign: "right" }}>Comprado</th>
                 </tr>
               </thead>
               <tbody>
-                {visibles.map(x => {
+                {visibles.map((x, i) => {
                   const varia = x.costo_min != null && Number(x.costo_min) !== Number(x.costo_max);
+                  // La lista viene con stock primero: acá empieza lo agotado
+                  const abreAgotados =
+                    Number(x.stock) <= 0 && (i === 0 || Number(visibles[i - 1].stock) > 0);
                   return (
-                    <tr key={x.producto_id}>
-                      <td style={td}>
-                        <div style={{ fontWeight: 600 }}>{x.modelo.trim()}</div>
-                        <div style={{ color: "#64748b", fontSize: "0.74rem" }}>{subtitulo(x)}</div>
-                      </td>
-                      <td style={{ ...td, textAlign: "right" }}>
-                        {editando === x.producto_id ? editorUsd(x) : botonUsd(x)}
-                      </td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>
-                        {x.costo_ultimo != null ? fmt(x.costo_ultimo) : <span style={{ color: "#475569", fontWeight: 400 }}>sin costo</span>}
-                      </td>
-                      <td style={{ ...td, textAlign: "right", color: "#64748b", fontSize: "0.78rem" }}>
-                        {varia ? `${fmt(x.costo_min)} – ${fmt(x.costo_max)}` : "—"}
-                      </td>
-                      <td style={{ ...td, textAlign: "right", color: "#94a3b8" }}>{x.unidades}</td>
-                    </tr>
+                    <React.Fragment key={x.producto_id}>
+                      {abreAgotados && (
+                        <tr>
+                          <td colSpan={6} style={{ ...td, color: "#64748b", fontSize: "0.74rem", background: "#0f172a", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            Sin stock en la Central
+                          </td>
+                        </tr>
+                      )}
+                      <tr style={{ opacity: Number(x.stock) > 0 ? 1 : 0.55 }}>
+                        <td style={td}>
+                          <div style={{ fontWeight: 600 }}>{x.modelo.trim()}</div>
+                          <div style={{ color: "#64748b", fontSize: "0.74rem" }}>{subtitulo(x)}</div>
+                        </td>
+                        <td style={{ ...td, textAlign: "right" }}>{celdaStock(x)}</td>
+                        <td style={{ ...td, textAlign: "right" }}>
+                          {editando === x.producto_id ? editorUsd(x) : botonUsd(x)}
+                        </td>
+                        <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>
+                          {x.costo_ultimo != null ? fmt(x.costo_ultimo) : <span style={{ color: "#475569", fontWeight: 400 }}>sin costo</span>}
+                        </td>
+                        <td style={{ ...td, textAlign: "right", color: "#64748b", fontSize: "0.78rem" }}>
+                          {varia ? `${fmt(x.costo_min)} – ${fmt(x.costo_max)}` : "—"}
+                        </td>
+                        <td style={{ ...td, textAlign: "right", color: "#94a3b8" }}>{x.unidades}</td>
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
