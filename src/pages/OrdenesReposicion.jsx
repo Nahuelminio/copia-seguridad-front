@@ -339,25 +339,49 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
 
   const eliminarItem = (gusto_id) => setItems((prev) => prev.filter((i) => i.gusto_id !== gusto_id));
 
+  // Costos chicos sin tipo de cambio: la pinta de dólares cargados como pesos
+  const pareceUsd = items.some(
+    (i) => i.precio_costo !== "" && Number(i.precio_costo) > 0 && Number(i.precio_costo) < 1000
+  );
+
   const puedeGuardar = sucursalId && items.length > 0 && !guardando;
 
   const guardar = async () => {
     if (!puedeGuardar) return;
+    // Último freno antes de escribir costos en dólares como si fueran pesos
+    if (esCentral && tc == null && pareceUsd) {
+      const ok = window.confirm(
+        "Hay costos de menos de $1.000 y no cargaste el tipo de cambio.\n\n" +
+        "Se van a guardar como PESOS. Si en realidad son dólares, el costo " +
+        "queda mil veces más barato y los márgenes se van a ver inflados.\n\n" +
+        "¿Guardo igual?"
+      );
+      if (!ok) return;
+    }
     setGuardando(true);
     try {
       const res = await axios.post("/ordenes-reposicion", {
         sucursal_id: parseInt(sucursalId),
         notas: notas.trim() || undefined,
+        // El TC queda asentado en la orden: si no, después no hay modo de saber
+        // a qué dólar se compró.
+        ...(esCentral && tc != null ? { tipo_cambio: tc } : {}),
         items: items.map((i) => {
           let pc = null;
+          let usd = null;
           if (esCentral && i.precio_costo !== "") {
-            const usd = Number(i.precio_costo);
-            pc = tc != null ? usd * tc : usd; // convert to ARS if exchange rate set, else treat as ARS
+            const valor = Number(i.precio_costo);
+            // Con TC el campo es USD y se convierte; sin TC es pesos
+            if (tc != null) { usd = valor; pc = valor * tc; }
+            else { pc = valor; }
           }
           return {
             gusto_id: i.gusto_id,
             cantidad: i.cantidad,
             ...(pc != null ? { precio_costo: pc } : {}),
+            // Esto es lo que antes se perdía: el costo en USD nunca llegaba a
+            // la base, aunque fuera el número que se tipeaba
+            ...(usd != null ? { precio_costo_usd: usd } : {}),
           };
         }),
       });
@@ -441,6 +465,16 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
                   : <span>Completá el tipo de cambio para cargar costos en USD. Si lo dejás vacío, el campo de costo se tomará como pesos.</span>
                 }
               </div>
+              {/* Sin TC los costos se guardan como pesos. Si son de tres cifras
+                  son dólares y entran al sistema 1.600 veces más baratos: así
+                  se cargaron 90 Lost mary Dura a $8 en vez de $12.800. */}
+              {esCentral && tc == null && pareceUsd && (
+                <div style={{ background: "#450a0a", border: "1px solid #b91c1c", color: "#fca5a5", borderRadius: 8, padding: "8px 12px", fontSize: "0.8rem", maxWidth: 420 }}>
+                  <strong>Falta el tipo de cambio.</strong> Hay costos de menos de $1.000,
+                  que tienen pinta de estar en dólares. Sin TC se guardan como pesos y el
+                  costo entra mil veces más barato.
+                </div>
+              )}
             </div>
           </div>
         </div>
