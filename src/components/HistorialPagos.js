@@ -2,6 +2,11 @@ import React, { useEffect, useState, useMemo } from "react";
 import axios from "../utils/axiosInstance";
 import { getUsuario } from "../utils/auth";
 
+// Un pago viene de una sucursal o de un vendedor: los de vendedor no tienen
+// sucursal y antes se mostraban en blanco.
+const quienPago = (p) =>
+  p.sucursal || (p.vendedor ? `${p.vendedor} (vendedor)` : "Sin asignar");
+
 export default function HistorialPagos() {
   // Memoizamos usuario para evitar que cambie referencia en cada render
   const usuario = useMemo(() => getUsuario(), []);
@@ -192,7 +197,7 @@ export default function HistorialPagos() {
               ) : pagos.map((pago) => (
                 <tr key={pago.id}>
                   <td className="px-4 py-2 text-white-50">{pago.id}</td>
-                  <td className="px-4 py-2 text-white">{pago.sucursal}</td>
+                  <td className="px-4 py-2 text-white">{quienPago(pago)}</td>
                   <td className="px-4 py-2 text-white">{pago.metodo}</td>
                   <td className="px-4 py-2">
                     {pago.por_comprobante ? (
@@ -227,7 +232,7 @@ export default function HistorialPagos() {
           <div key={pago.id} className="card mb-2 border-0 shadow-sm" style={{ background: "#111827", borderRadius: "10px" }}>
             <div className="card-body py-2 px-3">
               <div className="d-flex justify-content-between align-items-center mb-1">
-                <span className="text-white fw-semibold small">{pago.sucursal}</span>
+                <span className="text-white fw-semibold small">{quienPago(pago)}</span>
                 <span className="fw-bold" style={{ color: "#6ee7a0" }}>{fmtMonto(pago.monto)}</span>
               </div>
               <div className="d-flex justify-content-between align-items-center gap-2">

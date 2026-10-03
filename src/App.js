@@ -12,7 +12,6 @@ import ProductoPage from "./pages/ProductoPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import SucursalDashboard from "./pages/SucursalDashboard";
 import RegistrarVenta from "./components/RegistrarVenta";
-import CrearSucursal from "./pages/CrearSucursal";
 import HistorialVentas from "./components/HistorialVentas";
 import VentasMensuales from "./components/VentasMensuales";
 import HistorialReposiciones from "./components/HistorialReposiciones";
@@ -43,6 +42,8 @@ import CostosCentral from "./pages/CostosCentral";
 import PedidosCentral from "./pages/PedidosCentral";
 import ShishaPage from "./pages/ShishaPage";
 import Eventos from "./pages/Eventos";
+import Metricas from "./pages/Metricas";
+import MovimientosStock from "./pages/MovimientosStock";
 
 // Componente wrapper para mostrar el Navbar solo si no está en login
 const AppLayout = ({ children }) => {
@@ -145,14 +146,6 @@ function App() {
             }
           />
           <Route
-            path="/crear-sucursal"
-            element={
-              <PrivateRoute>
-                <Clientes />
-              </PrivateRoute>
-            }
-          />
-          <Route
             path="/historial"
             element={
               <PrivateRoute>
@@ -199,6 +192,24 @@ function App() {
             element={
               <PrivateRoute>
                 <Eventos />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/movimientos-stock"
+            element={
+              <PrivateRoute>
+                <MovimientosStock />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/metricas"
+            element={
+              <PrivateRoute>
+                <Metricas />
               </PrivateRoute>
             }
           />

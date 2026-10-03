@@ -103,7 +103,7 @@ function Navbar() {
                     { path: "/productosTotal",   label: "Pods por sucursal",          onClick: cerrarMenu },
                     ...(rol === "admin" ? [
                       { path: "/transferencias",       label: "Transferir entre sucursales", onClick: cerrarMenu },
-                      { path: "/sucursales/gestionar", label: "Teléfonos de sucursales",     onClick: cerrarMenu },
+                      { path: "/sucursales/gestionar", label: "Sucursales y usuarios",       onClick: cerrarMenu },
                     ] : []),
                   ]}
                 />
@@ -190,6 +190,32 @@ function Navbar() {
                 )}
               </>
             )}
+
+                {/* ── Movimientos de stock: qué entró y salió (solo admin) ── */}
+                {rol === "admin" && (
+                  <li className="nav-item">
+                    <Link
+                      className={`nav-link ${location.pathname === "/movimientos-stock" ? "active" : ""}`}
+                      to="/movimientos-stock"
+                      onClick={cerrarMenu}
+                    >
+                      Movimientos
+                    </Link>
+                  </li>
+                )}
+
+                {/* ── Métricas: de dónde viene la plata (solo admin) ── */}
+                {rol === "admin" && (
+                  <li className="nav-item">
+                    <Link
+                      className={`nav-link ${location.pathname === "/metricas" ? "active" : ""}`}
+                      to="/metricas"
+                      onClick={cerrarMenu}
+                    >
+                      Métricas
+                    </Link>
+                  </li>
+                )}
 
                 {/* ── Eventos: catálogo con QR para fiestas (solo admin) ── */}
                 {rol === "admin" && (

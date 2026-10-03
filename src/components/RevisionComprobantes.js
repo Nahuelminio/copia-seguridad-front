@@ -9,6 +9,15 @@ const fmt = (n) =>
 
 const soloFecha = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
+// El monto se escribe a mano y acá se usa coma decimal. Con un input numérico
+// el navegador devuelve vacío en cuanto ve una coma, y el aprobar se cortaba
+// sin decir nada. Se acepta cualquiera de las dos formas.
+const aNumero = (v) => {
+  const limpio = String(v ?? "").trim().replace(/\s/g, "").replace(",", ".");
+  const n = Number(limpio);
+  return Number.isFinite(n) ? n : NaN;
+};
+
 export default function RevisionComprobantes({ onAprobado }) {
   const [pendientes, setPendientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -16,6 +25,8 @@ export default function RevisionComprobantes({ onAprobado }) {
   const [edicion, setEdicion] = useState({});     // pago_id -> {monto, fecha, metodo}
   const [procesando, setProcesando] = useState(null);
   const [ampliada, setAmpliada] = useState(null);
+  const [error, setError] = useState({});      // pago_id -> mensaje
+  const [duplicado, setDuplicado] = useState({}); // pago_id -> {error, duplicado_de}
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -54,9 +65,16 @@ export default function RevisionComprobantes({ onAprobado }) {
   const editar = (pagoId, key, valor) =>
     setEdicion((prev) => ({ ...prev, [pagoId]: { ...prev[pagoId], [key]: valor } }));
 
-  const aprobar = async (p) => {
-    const monto = Number(campo(p, "monto"));
-    if (!monto || monto <= 0) return;
+  const aprobar = async (p, forzar = false) => {
+    const monto = aNumero(campo(p, "monto"));
+    // Antes esto era un `return` a secas: si el monto quedaba mal, el botón no
+    // hacía nada y no había forma de saber por qué.
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setError((prev) => ({ ...prev, [p.id]: "Revisá el monto: tiene que ser un número mayor a cero." }));
+      return;
+    }
+    setError((prev) => ({ ...prev, [p.id]: null }));
+    setDuplicado((prev) => ({ ...prev, [p.id]: null }));
     setProcesando(p.id);
     try {
       await axios.patch(`/pagos/${p.id}/revisar`, {
@@ -66,11 +84,24 @@ export default function RevisionComprobantes({ onAprobado }) {
         sucursal_id: p.sucursal_id,
         referencia: p.referencia,
         estado: "ok",
+        forzar,
       });
       setPendientes((prev) => prev.filter((x) => x.id !== p.id));
       if (onAprobado) onAprobado();
-    } catch {
-      /* el pago queda en la lista para reintentar */
+    } catch (e) {
+      // El catch estaba vacío y se comía el error: el pago quedaba en la lista
+      // sin ninguna explicación.
+      console.error("Error al aprobar el pago", p.id, e);
+      const d = e.response?.data;
+      if (e.response?.status === 409 && d?.puede_forzar) {
+        // Parece duplicado: se muestra contra cuál choca y se deja decidir
+        setDuplicado((prev) => ({ ...prev, [p.id]: d }));
+      } else {
+        setError((prev) => ({
+          ...prev,
+          [p.id]: d?.error || e.message || "No se pudo aprobar. Probá de nuevo.",
+        }));
+      }
     } finally {
       setProcesando(null);
     }
@@ -81,8 +112,12 @@ export default function RevisionComprobantes({ onAprobado }) {
     try {
       await axios.delete(`/pagos/${p.id}/rechazar`);
       setPendientes((prev) => prev.filter((x) => x.id !== p.id));
-    } catch {
-      /* queda en la lista */
+    } catch (e) {
+      console.error("Error al rechazar el pago", p.id, e);
+      setError((prev) => ({
+        ...prev,
+        [p.id]: e.response?.data?.error || e.message || "No se pudo rechazar.",
+      }));
     } finally {
       setProcesando(null);
     }
@@ -167,8 +202,8 @@ export default function RevisionComprobantes({ onAprobado }) {
                     <div className="col-6">
                       <label style={label}>Monto</label>
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         className="form-control form-control-sm"
                         style={inputDark}
                         value={campo(p, "monto")}
@@ -218,7 +253,7 @@ export default function RevisionComprobantes({ onAprobado }) {
                     </div>
                   </div>
 
-                  <div style={montoGrande}>${fmt(campo(p, "monto"))}</div>
+                  <div style={montoGrande}>${fmt(aNumero(campo(p, "monto")))}</div>
 
                   <div className="d-flex gap-2 mt-3">
                     <button
@@ -236,6 +271,33 @@ export default function RevisionComprobantes({ onAprobado }) {
                       Rechazar
                     </button>
                   </div>
+
+                  {error[p.id] && (
+                    <div style={mensajeError}>{error[p.id]}</div>
+                  )}
+
+                  {/* El sistema cree que es duplicado: se avisa y se deja
+                      decidir, en vez de bloquear sin explicación */}
+                  {duplicado[p.id] && (
+                    <div style={mensajeDuplicado}>
+                      <div>{duplicado[p.id].error}</div>
+                      <div className="d-flex gap-2 mt-2">
+                        <button
+                          className="btn btn-warning btn-sm"
+                          disabled={procesando === p.id}
+                          onClick={() => aprobar(p, true)}
+                        >
+                          Es otro pago, aprobar igual
+                        </button>
+                        <button
+                          className="btn btn-outline-light btn-sm"
+                          onClick={() => setDuplicado((prev) => ({ ...prev, [p.id]: null }))}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -309,6 +371,28 @@ const montoGrande = {
   fontWeight: 800,
   fontSize: "1.5rem",
   marginTop: 14,
+};
+
+const mensajeDuplicado = {
+  marginTop: 10,
+  padding: "10px 12px",
+  borderRadius: 8,
+  background: "#241a05",
+  border: "1px solid #78350f",
+  color: "#fcd34d",
+  fontSize: "0.8rem",
+  lineHeight: 1.55,
+};
+
+const mensajeError = {
+  marginTop: 10,
+  padding: "8px 11px",
+  borderRadius: 8,
+  background: "#2a0d0d",
+  border: "1px solid #7f1d1d",
+  color: "#fca5a5",
+  fontSize: "0.8rem",
+  lineHeight: 1.5,
 };
 
 const inputDark = {

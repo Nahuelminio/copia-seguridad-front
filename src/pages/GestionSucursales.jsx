@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
 
@@ -22,18 +22,86 @@ export default function GestionSucursales() {
   const [guardando, setGuardando] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
-    axios.get("/sucursales")
-      .then((r) => {
-        setSucursales(r.data || []);
-        // Inicializar estado de edición con valores actuales
-        const inicial = {};
-        (r.data || []).forEach((s) => { inicial[s.id] = { telefono: s.telefono || "" }; });
-        setEditando(inicial);
-      })
-      .catch(() => toast.error("Error al cargar sucursales"))
-      .finally(() => setCargando(false));
+  const [nuevaSucursal, setNuevaSucursal] = useState("");
+  const [creandoSuc, setCreandoSuc] = useState(false);
+
+  const [usuarios, setUsuarios] = useState([]);
+  // La contraseña la escribe el admin acá y va directo al backend, que la
+  // hashea. No se guarda ni se muestra en ningún momento.
+  const [nuevoUsuario, setNuevoUsuario] = useState({
+    email: "", password: "", rol: "sucursal", sucursal_id: "",
+  });
+  const [creandoUsr, setCreandoUsr] = useState(false);
+
+  const cargarSucursales = useCallback(async () => {
+    try {
+      const r = await axios.get("/sucursales");
+      setSucursales(r.data || []);
+      const inicial = {};
+      (r.data || []).forEach((s) => { inicial[s.id] = { telefono: s.telefono || "" }; });
+      setEditando(inicial);
+    } catch {
+      toast.error("Error al cargar sucursales");
+    }
   }, []);
+
+  const cargarUsuarios = useCallback(async () => {
+    try {
+      const r = await axios.get("/auth/usuarios");
+      setUsuarios(r.data || []);
+    } catch {
+      /* Si no es admin no hay usuarios que mostrar; el resto de la página sirve */
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.all([cargarSucursales(), cargarUsuarios()]).finally(() => setCargando(false));
+  }, [cargarSucursales, cargarUsuarios]);
+
+  const crearSucursal = async (e) => {
+    e.preventDefault();
+    const nombre = nuevaSucursal.trim();
+    if (!nombre) return;
+    if (sucursales.some((s) => s.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
+      return toast.error("Ya existe una sucursal con ese nombre");
+    }
+    setCreandoSuc(true);
+    try {
+      await axios.post("/sucursales", { nombre });
+      toast.success(`Sucursal "${nombre}" creada`);
+      setNuevaSucursal("");
+      cargarSucursales();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo crear la sucursal");
+    } finally {
+      setCreandoSuc(false);
+    }
+  };
+
+  const crearUsuario = async (e) => {
+    e.preventDefault();
+    const { email, password, rol, sucursal_id } = nuevoUsuario;
+    if (!email.trim()) return toast.error("Falta el email");
+    if (password.length < 6) return toast.error("La contraseña tiene que tener al menos 6 caracteres");
+    if (rol !== "admin" && !sucursal_id) return toast.error("Elegí a qué sucursal pertenece");
+
+    setCreandoUsr(true);
+    try {
+      await axios.post("/auth/register", {
+        email: email.trim(),
+        password,
+        rol,
+        sucursal_id: rol === "admin" ? null : Number(sucursal_id),
+      });
+      toast.success(`Usuario ${email.trim()} creado`);
+      setNuevoUsuario({ email: "", password: "", rol, sucursal_id: "" });
+      cargarUsuarios();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo crear el usuario");
+    } finally {
+      setCreandoUsr(false);
+    }
+  };
 
   const guardar = async (s) => {
     setGuardando(s.id);
@@ -62,11 +130,107 @@ export default function GestionSucursales() {
   return (
     <div className="container py-4" style={{ maxWidth: 720 }}>
       <div className="mb-4">
-        <h4 className="fw-bold mb-1" style={{ color: "#fff" }}>Teléfonos de sucursales</h4>
+        <h4 className="fw-bold mb-1" style={{ color: "#fff" }}>Sucursales y usuarios</h4>
         <p className="small mb-0" style={{ color: "#94a3b8" }}>
-          Configurá el número de WhatsApp de cada sucursal para enviar remitos automáticamente.
-          Usá formato internacional: <code style={{ color: "#60a5fa" }}>5493XXXXXXXXX</code>
+          Crear sucursales, darles acceso y configurar el WhatsApp al que se envían
+          los remitos. Formato internacional: <code style={{ color: "#60a5fa" }}>5493XXXXXXXXX</code>
         </p>
+      </div>
+
+      {/* ── Nueva sucursal ── */}
+      <div style={{ ...cardStyle, marginBottom: 16 }}>
+        <div className="card-body" style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: "0.72rem", color: "#64748b", textTransform: "uppercase",
+            letterSpacing: "0.05em", marginBottom: 8 }}>
+            Nueva sucursal
+          </div>
+          <form onSubmit={crearSucursal} className="d-flex gap-2 flex-wrap">
+            <input className="form-control form-control-sm" style={{ ...inputDark, flex: 1, minWidth: 200 }}
+              placeholder="Ej: Villa Sarita" value={nuevaSucursal}
+              onChange={(e) => setNuevaSucursal(e.target.value)} />
+            <button className="btn btn-sm btn-success" type="submit" disabled={creandoSuc || !nuevaSucursal.trim()}>
+              {creandoSuc ? "Creando…" : "Crear sucursal"}
+            </button>
+          </form>
+          <p className="small mb-0" style={{ color: "#64748b", marginTop: 8 }}>
+            Nace sin stock ni precios. Después hay que cargarle productos y crear su usuario.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Usuarios ── */}
+      <div style={{ ...cardStyle, marginBottom: 24 }}>
+        <div className="card-body" style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: "0.72rem", color: "#64748b", textTransform: "uppercase",
+            letterSpacing: "0.05em", marginBottom: 10 }}>
+            Usuarios ({usuarios.length})
+          </div>
+
+          {usuarios.length > 0 && (
+            <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+              {usuarios.map((u) => (
+                <div key={u.id} className="d-flex justify-content-between align-items-center flex-wrap"
+                  style={{ gap: 8, padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ color: "#e2e8f0", fontSize: "0.88rem" }}>{u.email}</span>
+                  <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.06em",
+                      padding: "2px 8px", borderRadius: 999,
+                      background: u.rol === "admin" ? "rgba(239,68,68,.15)" : "rgba(255,255,255,.07)",
+                      color: u.rol === "admin" ? "#fca5a5" : "#94a3b8" }}>
+                      {u.rol}
+                    </span>
+                    <span style={{ color: "#64748b", fontSize: "0.78rem", minWidth: 110, textAlign: "right" }}>
+                      {u.sucursal || "—"}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={crearUsuario} className="row g-2">
+            <div className="col-12 col-md-4">
+              <input className="form-control form-control-sm" style={inputDark} type="email"
+                placeholder="Email" value={nuevoUsuario.email} autoComplete="off"
+                onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} />
+            </div>
+            <div className="col-6 col-md-3">
+              <input className="form-control form-control-sm" style={inputDark} type="password"
+                placeholder="Contraseña" value={nuevoUsuario.password} autoComplete="new-password"
+                onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })} />
+            </div>
+            <div className="col-6 col-md-2">
+              <select className="form-select form-select-sm" style={inputDark} value={nuevoUsuario.rol}
+                onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}>
+                <option value="sucursal">Sucursal</option>
+                <option value="vendedor">Vendedor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div className="col-8 col-md-2">
+              <select className="form-select form-select-sm" style={inputDark}
+                value={nuevoUsuario.sucursal_id} disabled={nuevoUsuario.rol === "admin"}
+                onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, sucursal_id: e.target.value })}>
+                <option value="">Sucursal…</option>
+                {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
+            <div className="col-4 col-md-1">
+              <button className="btn btn-sm btn-success w-100" type="submit" disabled={creandoUsr}>
+                {creandoUsr ? "…" : "Crear"}
+              </button>
+            </div>
+          </form>
+          <p className="small mb-0" style={{ color: "#64748b", marginTop: 8 }}>
+            La contraseña se guarda encriptada y no se puede volver a ver. Un usuario
+            <strong> admin</strong> ve y edita todo el sistema.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "0.72rem", color: "#64748b", textTransform: "uppercase",
+        letterSpacing: "0.05em", marginBottom: 10 }}>
+        WhatsApp de cada sucursal
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

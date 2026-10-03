@@ -7,6 +7,14 @@ const fmt = (n) => Math.round(Number(n)).toLocaleString("es-AR");
 // Los unitarios chicos (un carbón, un papel) se pierden si se redondean a peso
 const fmtUnit = (n) => `$${Number(n).toLocaleString("es-AR", { maximumFractionDigits: n < 100 ? 2 : 0 })}`;
 const fmtPaq = (n) => { const v = Number(n); return v % 1 === 0 ? String(v) : v.toFixed(2); };
+// Cómo se muestra cada tipo de venta en el historial
+const ETIQUETA_TIPO = { nueva: "Nueva", recarga: "Recarga", paquete: "Paquete" };
+const ESTILO_TIPO = {
+  nueva:   { background: "#1c1c1c", border: "1px solid #3f3f3f" },
+  recarga: { background: "#0f172a", border: "1px solid #1e3a5f" },
+  paquete: { background: "#1c1508", border: "1px solid #4a3410" },
+};
+
 const STOCK_MIN_TABACO = 1 / 3;
 const STOCK_MIN_CARBONES = 4;
 const STOCK_MIN_PAPELES = 4;
@@ -63,8 +71,9 @@ export default function ShishaPage() {
   const [anulando, setAnulando] = useState(null); // venta a anular
 
   const [formInsumos, setFormInsumos] = useState({ carbones: "", papeles: "" });
-  const [formConfig, setFormConfig] = useState({ precio_dolar: "", precio_nueva: "", precio_recarga: "" });
+  const [formConfig, setFormConfig] = useState({ precio_dolar: "", precio_nueva: "", precio_recarga: "", precio_paquete: "" });
   const [editandoConfig, setEditandoConfig] = useState(false);
+  const [formPaquete, setFormPaquete] = useState({ cantidad: 1, precio: "" });
   const [nuevoSabor, setNuevoSabor] = useState("");
   const [stockSabor, setStockSabor] = useState({ id: "", paquetes: "" });
   const saborAjuste = sabores.find(x => String(x.id) === String(stockSabor.id));
@@ -176,7 +185,12 @@ export default function ShishaPage() {
   const cargarConfig = useCallback(async () => {
     const res = await axios.get("/shisha/config");
     setConfig(res.data);
-    setFormConfig({ precio_dolar: res.data.precio_dolar, precio_nueva: res.data.precio_nueva, precio_recarga: res.data.precio_recarga });
+    setFormConfig({
+      precio_dolar: res.data.precio_dolar,
+      precio_nueva: res.data.precio_nueva,
+      precio_recarga: res.data.precio_recarga,
+      precio_paquete: res.data.precio_paquete,
+    });
   }, []);
 
   const cargarSabores = useCallback(async () => {
@@ -209,6 +223,34 @@ export default function ShishaPage() {
   const confirmarAlquiler = (tipo) => {
     if (!saborSeleccionado) return flash("Seleccioná un sabor", "warning");
     setConfirmando(tipo);
+  };
+
+  // Venta de paquetes cerrados: no arma shisha, así que no gasta carbón ni
+  // aluminio, y descuenta paquetes enteros del sabor.
+  const registrarPaquete = async () => {
+    if (!saborSeleccionado) return flash("Seleccioná un sabor", "warning");
+    const cantidad = Number(formPaquete.cantidad) || 1;
+    const sabor = sabores.find((s) => String(s.id) === String(saborSeleccionado));
+    if (sabor && Number(sabor.stock_paquetes) < cantidad) {
+      return flash(`Solo quedan ${Number(sabor.stock_paquetes).toFixed(2)} paquetes de ${sabor.nombre}`, "warning");
+    }
+    setCargando(true);
+    try {
+      const res = await axios.post("/shisha/paquete", {
+        sabor_id: saborSeleccionado,
+        cantidad,
+        precio: formPaquete.precio === "" ? null : Number(formPaquete.precio),
+        nota: nota || null,
+      });
+      flash(`${cantidad} paquete${cantidad > 1 ? "s" : ""} — $${fmt(res.data.precio_venta)} · ganancia $${fmt(res.data.ganancia)}`);
+      setSabores(res.data.sabores);
+      setNota("");
+      setFormPaquete({ cantidad: 1, precio: "" });
+      cargarConfig(); cargarVentas(); cargarResumen(); cargarCuenta();
+    } catch (e) {
+      flash(e.response?.data?.error || "Error al registrar", "danger");
+    }
+    setCargando(false);
   };
 
   const registrarAlquiler = async () => {
@@ -416,6 +458,39 @@ export default function ShishaPage() {
               </button>
             </div>
 
+            {/* Venta de paquetes cerrados: se lleva el tabaco sin armar nada */}
+            <div style={s.card}>
+              <div style={s.cardTitle}>Vender paquete cerrado</div>
+              <div style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>Cantidad</div>
+                  <input type="number" min="1" style={s.input} value={formPaquete.cantidad}
+                    onChange={e => setFormPaquete({ ...formPaquete, cantidad: e.target.value })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>
+                    Precio por paquete {formPaquete.precio === "" && `(por defecto $${fmt(config.precio_paquete)})`}
+                  </div>
+                  <input type="number" min="0" style={s.input}
+                    placeholder={String(config.precio_paquete ?? "")}
+                    value={formPaquete.precio}
+                    onChange={e => setFormPaquete({ ...formPaquete, precio: e.target.value })} />
+                </div>
+              </div>
+              <button style={{ ...s.btnSecondary, width: "100%", opacity: cargando ? .6 : 1 }}
+                onClick={registrarPaquete} disabled={cargando}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  Vender {formPaquete.cantidad || 1} paquete{Number(formPaquete.cantidad) > 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 13, color: "#fcd34d", marginTop: 2 }}>
+                  ${fmt((Number(formPaquete.precio) || Number(config.precio_paquete) || 0) * (Number(formPaquete.cantidad) || 1))}
+                </div>
+                <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
+                  descuenta {formPaquete.cantidad || 1} paquete{Number(formPaquete.cantidad) > 1 ? "s" : ""} · no usa carbón ni aluminio
+                </div>
+              </button>
+            </div>
+
             <div style={s.card}>
               <div style={s.cardTitle}>Stock general</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -561,8 +636,10 @@ export default function ShishaPage() {
                 <div key={v.id} style={s.ventaRow}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ ...s.badge, background: v.tipo === "nueva" ? "#1c1c1c" : "#0f172a", border: `1px solid ${v.tipo === "nueva" ? "#3f3f3f" : "#1e3a5f"}` }}>
-                        {v.tipo === "nueva" ? "Nueva" : "Recarga"}
+                      <span style={{ ...s.badge, ...ESTILO_TIPO[v.tipo] }}>
+                        {v.tipo === "paquete"
+                          ? `${v.cantidad > 1 ? `${v.cantidad} paquetes` : "Paquete"}`
+                          : ETIQUETA_TIPO[v.tipo]}
                       </span>
                       {v.sabor_nombre && <span style={{ fontSize: 12, color: "#a78bfa" }}>{v.sabor_nombre}</span>}
                     </div>
@@ -985,7 +1062,8 @@ export default function ShishaPage() {
               {!editandoConfig ? (
                 [{ label: "Precio del dólar", value: `$${fmt(config.precio_dolar)}` },
                  { label: "Nueva shisha", value: `$${fmt(config.precio_nueva)}` },
-                 { label: "Recarga", value: `$${fmt(config.precio_recarga)}` }].map(r => (
+                 { label: "Recarga", value: `$${fmt(config.precio_recarga)}` },
+                 { label: "Paquete de tabaco", value: `$${fmt(config.precio_paquete)}` }].map(r => (
                   <div key={r.label} style={s.configRow}>
                     <span style={{ color: "#888", fontSize: 14 }}>{r.label}</span>
                     <span style={{ fontWeight: 600 }}>{r.value}</span>
@@ -995,7 +1073,8 @@ export default function ShishaPage() {
                 <form onSubmit={guardarConfig}>
                   {[{ label: "Precio del dólar", key: "precio_dolar" },
                     { label: "Nueva shisha", key: "precio_nueva" },
-                    { label: "Recarga", key: "precio_recarga" }].map(f => (
+                    { label: "Recarga", key: "precio_recarga" },
+                    { label: "Paquete de tabaco", key: "precio_paquete" }].map(f => (
                     <div key={f.key} style={s.formGroup}>
                       <label style={s.label}>{f.label}</label>
                       <input type="number" style={s.input} value={formConfig[f.key]}
@@ -1028,7 +1107,11 @@ export default function ShishaPage() {
       {anulando && (
         <Modal titulo="¿Anular esta venta?" onClose={() => setAnulando(null)}>
           <div style={{ color: "#888", fontSize: 14, marginBottom: 16 }}>
-            <div>Tipo: <strong style={{ color: "#e5e7eb" }}>{anulando.tipo === "nueva" ? "Nueva shisha" : "Recarga"}</strong></div>
+            <div>Tipo: <strong style={{ color: "#e5e7eb" }}>
+              {anulando.tipo === "paquete"
+                ? `${anulando.cantidad} paquete${anulando.cantidad > 1 ? "s" : ""} de tabaco`
+                : ETIQUETA_TIPO[anulando.tipo]}
+            </strong></div>
             {anulando.sabor_nombre && <div>Sabor: <strong style={{ color: "#a78bfa" }}>{anulando.sabor_nombre}</strong></div>}
             <div style={{ marginTop: 8, color: "#f87171", fontSize: 12 }}>Los insumos van a volver al stock.</div>
           </div>

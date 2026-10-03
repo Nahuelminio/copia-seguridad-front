@@ -570,6 +570,28 @@ function RegistrarReposicion() {
               </div>
             )}
 
+            {/* Un costo de tres cifras en el campo de pesos casi siempre es el
+                precio en dólares puesto en el lugar equivocado: ya pasó con 90
+                Lost mary Dura cargadas a $8. Los campos son independientes, no
+                se convierte nada solo. */}
+            {Number(form.precio_costo) > 0 && Number(form.precio_costo) < 1000 && (
+              <div
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#fbbf24",
+                  background: "#422006",
+                  border: "1px solid #78350f",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  marginTop: 6,
+                }}
+              >
+                ${Number(form.precio_costo).toLocaleString("es-AR")} por unidad es muy
+                poco para pesos. ¿No era el precio en dólares? Ese va en el campo de
+                abajo — acá va lo que pagaste en pesos.
+              </div>
+            )}
+
             {form.precio_costo !== "" && seleccionado?.precio && (
               <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
                 Precio de venta actual: <strong style={{ color: "#e2e8f0" }}>${Number(seleccionado.precio).toLocaleString("es-AR")}</strong>
