@@ -282,6 +282,18 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
   const [mostrarDrop, setMostrarDrop] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [tipoCambio, setTipoCambio] = useState("");
+  // El dólar cripto de hoy, que es al que compramos. Viene puesto solo para que
+  // no haya que tipearlo: dejarlo vacío es lo que hace entrar dólares como pesos.
+  const [dolarAuto, setDolarAuto] = useState(null);
+  useEffect(() => {
+    axios.get("/costos-central/dolar")
+      .then((r) => {
+        const d = Number(r.data?.dolar) || null;
+        setDolarAuto(d);
+        if (d) setTipoCambio((prev) => (prev === "" ? String(Math.round(d)) : prev));
+      })
+      .catch(() => setDolarAuto(null));
+  }, []);
   const inputRef = useRef(null);
   const dropRef = useRef(null);
 
@@ -461,7 +473,12 @@ function FormNuevaOrden({ sucursales, onGuardada, onCancelar }) {
               </div>
               <div style={{ color: "#64748b", fontSize: "0.78rem", maxWidth: 260 }}>
                 {tc != null
-                  ? <span style={{ color: "#f59e0b" }}>Cargá los costos en USD — el sistema los convierte a $ ARS automáticamente al guardar.</span>
+                  ? <span style={{ color: "#f59e0b" }}>
+                      Cargá los costos en USD — el sistema los convierte a $ ARS automáticamente al guardar.
+                      {dolarAuto > 0 && Math.round(dolarAuto) === Number(tipoCambio) && (
+                        <span style={{ color: "#64748b" }}> Es el dólar cripto de hoy; si compraste a otro, cambialo.</span>
+                      )}
+                    </span>
                   : <span>Completá el tipo de cambio para cargar costos en USD. Si lo dejás vacío, el campo de costo se tomará como pesos.</span>
                 }
               </div>

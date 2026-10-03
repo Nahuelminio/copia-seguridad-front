@@ -58,6 +58,7 @@ const fmtUsd = (n) => (n != null ? `USD ${Number(n).toLocaleString("es-AR", { ma
  */
 function ListaCostosModal({ onClose }) {
   const [lista, setLista] = useState(null);
+  const [dolarHoy, setDolarHoy] = useState(null);
   const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("");
   const [soloConStock, setSoloConStock] = useState(true);
@@ -76,7 +77,8 @@ function ListaCostosModal({ onClose }) {
   const cargar = useCallback(async () => {
     try {
       const res = await axios.get("/costos-central/lista");
-      setLista(res.data);
+      setLista(res.data?.modelos || []);
+      setDolarHoy(Number(res.data?.dolar_hoy) || null);
     } catch (e) {
       setError(e.response?.data?.error || "No se pudo cargar la lista");
     }
@@ -119,8 +121,10 @@ function ListaCostosModal({ onClose }) {
     if (x.usd_ultimo != null) a.usd += stock * Number(x.usd_ultimo);
     else if (x.usd_estimado != null) { a.usd += stock * Number(x.usd_estimado); a.estimados += 1; }
     else a.sinUsd += 1;
+    // Lo mismo pero al dólar de hoy: qué saldría reponerlo ahora
+    if (x.usd_hoy != null) a.usdHoy += stock * Number(x.usd_hoy);
     return a;
-  }, { modelos: 0, unidades: 0, ars: 0, usd: 0, sinUsd: 0, estimados: 0 });
+  }, { modelos: 0, unidades: 0, ars: 0, usd: 0, usdHoy: 0, sinUsd: 0, estimados: 0 });
 
   const th = { ...label, padding: "8px 10px", borderBottom: "1px solid #1e293b", whiteSpace: "nowrap" };
   const td = { padding: "10px", borderBottom: "1px solid #1e293b", color: "#e2e8f0", verticalAlign: "middle" };
@@ -251,6 +255,14 @@ function ListaCostosModal({ onClose }) {
                     )}
                   </>
                 )}
+              </div>
+            )}
+            {/* Lo de arriba es lo que pagaste; esto es lo que saldría reponerlo
+                hoy, al dólar en vivo. Son dos preguntas distintas. */}
+            {dolarHoy > 0 && resumen.usdHoy > 0 && (
+              <div style={{ color: "#64748b", fontSize: "0.76rem", marginTop: 2 }}>
+                Reponerlo hoy, al dólar cripto de {fmt(dolarHoy)}, saldría{" "}
+                <strong style={{ color: "#94a3b8" }}>{fmtUsd(Math.round(resumen.usdHoy))}</strong>
               </div>
             )}
           </div>
