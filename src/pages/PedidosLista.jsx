@@ -69,7 +69,14 @@ export default function PedidosLista() {
   const copiar = (p) => {
     const texto =
       `Pedido de ${p.quien} — ${cuando(p.fecha)}\n` +
-      p.items.map((i) => `${i.cantidad}x ${i.nombre} — ${plata(i.precio_usd)}`).join("\n") +
+      ["stock", "proveedor"]
+        .map((origen) => {
+          const r = p.items.filter((i) => i.origen === origen);
+          if (!r.length) return "";
+          return `\n${origen === "stock" ? "DE LO QUE HAY" : "A PEDIDO"}\n` +
+            r.map((i) => `${i.cantidad}x ${i.nombre} — ${plata(i.precio_usd)}`).join("\n");
+        })
+        .join("") +
       `\n\nTotal: ${plata(p.total_usd)}` +
       (p.nota ? `\nNota: ${p.nota}` : "");
     navigator.clipboard.writeText(texto).then(
@@ -164,24 +171,40 @@ export default function PedidosLista() {
                   </div>
                 )}
 
-                <table className="table table-sm table-dark mb-3">
-                  <tbody>
-                    {p.items.map((i) => (
-                      <tr key={i.sku}>
-                        <td style={{ width: 50 }} className="fw-bold">
-                          {i.cantidad}x
-                        </td>
-                        <td>{i.nombre}</td>
-                        <td className="text-end text-white-50" style={{ width: 90 }}>
-                          {plata(i.precio_usd)}
-                        </td>
-                        <td className="text-end" style={{ width: 90 }}>
-                          {plata(i.cantidad * i.precio_usd)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {/* Separadas porque son dos cosas distintas de atender: lo
+                    que hay sale de Central hoy, lo otro hay que comprarlo. */}
+                {["stock", "proveedor"].map((origen) => {
+                  const renglones = p.items.filter((i) => i.origen === origen);
+                  if (!renglones.length) return null;
+                  return (
+                    <div key={origen} className="mb-3">
+                      <div
+                        className="small fw-semibold mb-1"
+                        style={{ color: origen === "stock" ? "#4ade80" : "#7dd3fc" }}
+                      >
+                        {origen === "stock" ? "De lo que hay en Central" : "A pedido"}
+                      </div>
+                      <table className="table table-sm table-dark mb-0">
+                        <tbody>
+                          {renglones.map((i) => (
+                            <tr key={i.sku}>
+                              <td style={{ width: 50 }} className="fw-bold">
+                                {i.cantidad}x
+                              </td>
+                              <td>{i.nombre}</td>
+                              <td className="text-end text-white-50" style={{ width: 90 }}>
+                                {plata(i.precio_usd)}
+                              </td>
+                              <td className="text-end" style={{ width: 90 }}>
+                                {plata(i.cantidad * i.precio_usd)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
 
                 <div className="d-flex gap-2 flex-wrap">
                   <button className="btn btn-sm btn-outline-light" onClick={() => copiar(p)}>
