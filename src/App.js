@@ -31,6 +31,7 @@ import AdminLeads from "./pages/AdminLeads";
 import CuentasCorrientes from "./pages/CuentasCorrientes";
 import Clientes from "./pages/Clientes";
 import PedidosMayorista from "./pages/PedidosMayorista";
+import PedidosLista from "./pages/PedidosLista";
 import NuevoPedidoMayorista from "./pages/NuevoPedidoMayorista";
 import DashboardMayorista from "./pages/DashboardMayorista";
 import TransferenciasStock from "./pages/TransferenciasStock";
@@ -215,6 +216,14 @@ function App() {
           />
 
           {/* Mayorista */}
+          <Route
+            path="/mayorista/lista"
+            element={
+              <PrivateRoute>
+                <PedidosLista />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/mayorista"
             element={

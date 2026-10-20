@@ -145,6 +145,7 @@ function Navbar() {
                   label="Mayorista"
                   routes={[
                     { path: "/mayorista",           label: "Pedidos",            onClick: cerrarMenu },
+                    { path: "/mayorista/lista",     label: "Pedidos de la lista", onClick: cerrarMenu },
                     { path: "/mayorista/nuevo",     label: "Nuevo pedido",       onClick: cerrarMenu },
                     ...(rol === "admin" ? [
                       { path: "/mayorista/dashboard", label: "Dashboard mayorista", onClick: cerrarMenu },
