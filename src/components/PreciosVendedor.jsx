@@ -4,6 +4,20 @@ import { toast } from "react-toastify";
 
 const fmt = (n) => (n == null ? "—" : "$" + Math.round(Number(n)).toLocaleString("es-AR"));
 
+// Ganancia por unidad con el precio que está escrito (guardado o no), y el
+// margen sobre ese precio. En rojo si se vende por debajo del costo.
+function ganancia(valor, costo) {
+  const p = Number(valor), c = Number(costo);
+  if (!valor || !p || !c) return <span style={{ color: "#475569" }}>—</span>;
+  const g = p - c;
+  const color = g <= 0 ? "#ef4444" : g / p < 0.1 ? "#f59e0b" : "#22c55e";
+  return (
+    <span style={{ color }}>
+      {fmt(g)} <span style={{ fontSize: "0.75rem" }}>({Math.round((g / p) * 100)}%)</span>
+    </span>
+  );
+}
+
 // Precio fijo por modelo que paga el vendedor. Sin esto el vendedor no puede
 // vender ese modelo: es a propósito, para que nunca quede un precio tipeado.
 export default function PreciosVendedor() {
@@ -45,10 +59,10 @@ export default function PreciosVendedor() {
         {faltan > 0 && <span style={{ color: "#f59e0b" }}> Faltan {faltan}.</span>}
       </p>
       <div style={{ overflowX: "auto" }}>
-        <table className="table table-dark mb-0" style={{ fontSize: "0.86rem", minWidth: 560 }}>
+        <table className="table table-dark mb-0" style={{ fontSize: "0.86rem", minWidth: 760 }}>
           <thead>
             <tr>
-              <th>Modelo</th><th>Lista Central</th><th>Más usado</th><th>Precio vendedor</th><th></th>
+              <th>Modelo</th><th>Costo</th><th>Lista Central</th><th>Más usado</th><th>Precio vendedor</th><th>Ganancia</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -58,6 +72,7 @@ export default function PreciosVendedor() {
               return (
                 <tr key={f.producto_id}>
                   <td>{f.nombre}</td>
+                  <td style={{ color: "#fca5a5" }}>{fmt(f.costo)}</td>
                   <td style={{ color: "#94a3b8" }}>{fmt(f.precio_lista)}</td>
                   <td style={{ color: "#94a3b8" }}>
                     {f.sugerido != null && f.precio == null && !enEdicion ? (
@@ -72,6 +87,7 @@ export default function PreciosVendedor() {
                       value={valor} placeholder="Sin precio"
                       onChange={(e) => setEditando((ed) => ({ ...ed, [f.producto_id]: e.target.value }))} />
                   </td>
+                  <td>{ganancia(valor, f.costo)}</td>
                   <td>
                     {enEdicion && (
                       <button className="btn btn-sm btn-success" disabled={guardando === f.producto_id}
