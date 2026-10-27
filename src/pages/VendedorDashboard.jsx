@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ResumenDeudaSucursal from "../components/ResumenDeudaSucursal";
 import SubirComprobante from "../components/SubirComprobante";
 import MisVentasHoy from "../components/MisVentasHoy";
+import MiListaPrecios from "../components/MiListaPrecios";
 import { jwtDecode } from "jwt-decode";
 
 function VendedorDashboard() {
@@ -71,6 +72,7 @@ function VendedorDashboard() {
       )}
 
       <MisVentasHoy />
+      <MiListaPrecios />
 
       {/* Resumen de deuda */}
       <ResumenDeudaSucursal />
