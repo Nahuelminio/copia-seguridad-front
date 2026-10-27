@@ -74,8 +74,10 @@ function ProductoPage() {
         cargarProductos();
         toast.success("Producto agregado correctamente");
       })
-      .catch(() => {
-        toast.error("No se pudo agregar el producto");
+      .catch((err) => {
+        // El servidor explica por qué: si el sabor ya existe en esa sucursal,
+        // dice que se use una reposición, y eso es lo que hay que leer.
+        toast.error(err?.response?.data?.error || "No se pudo agregar el producto");
         throw new Error("Agregar falló");
       });
   };
