@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
+import PreciosVendedor from "../components/PreciosVendedor";
 
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
 
@@ -982,7 +983,7 @@ export default function VendedoresStats() {
   const [error,   setError]   = useState("");
 
   const cargar = useCallback(async () => {
-    if (tab === "deudas") return; // deudas tiene su propio fetch
+    if (tab === "deudas" || tab === "precios") return; // tienen su propio fetch
     setLoading(true);
     setError("");
     setData(null);
@@ -1007,6 +1008,7 @@ export default function VendedoresStats() {
     { key: "deudas",  label: "Deudas",  activeColor: "#10b981" },
     { key: "rendicion", label: "Rendición", activeColor: "#f59e0b" },
     { key: "detalle", label: "Detalle", activeColor: "#8b5cf6" },
+    { key: "precios", label: "Precios", activeColor: "#16a34a" },
   ];
 
   return (
@@ -1047,6 +1049,9 @@ export default function VendedoresStats() {
       {/* Tab: deudas */}
       {tab === "deudas" && <PanelDeudas />}
 
+      {/* Tab: precios fijos por modelo */}
+      {tab === "precios" && <PreciosVendedor />}
+
       {/* Tab: rendición — qué vendió contra qué rindió, día por día */}
       {tab === "rendicion" && <PanelRendicion />}
 
@@ -1061,7 +1066,7 @@ export default function VendedoresStats() {
       )}
 
       {/* Tab: semana / mes — selector de período */}
-      {tab !== "deudas" && (
+      {tab !== "deudas" && tab !== "precios" && (
         <>
           <div style={card} className="mb-4">
             {tab === "semana" ? (

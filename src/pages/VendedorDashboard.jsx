@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ResumenDeudaSucursal from "../components/ResumenDeudaSucursal";
 import SubirComprobante from "../components/SubirComprobante";
+import MisVentasHoy from "../components/MisVentasHoy";
 import { jwtDecode } from "jwt-decode";
 
 function VendedorDashboard() {
@@ -68,6 +69,8 @@ function VendedorDashboard() {
           <SubirComprobante />
         </div>
       )}
+
+      <MisVentasHoy />
 
       {/* Resumen de deuda */}
       <ResumenDeudaSucursal />

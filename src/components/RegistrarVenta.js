@@ -11,7 +11,10 @@ function RegistrarVenta() {
   const [gustoId, setGustoId] = useState("");
 
   const [cantidad, setCantidad] = useState(1);
-  const [precioVenta, setPrecioVenta] = useState("");
+  // Vendedor: precio fijo por modelo (lo carga el admin) y confirmación antes de registrar
+  const [preciosVendedor, setPreciosVendedor] = useState({});
+  const [modeloId, setModeloId] = useState("");
+  const [confirmando, setConfirmando] = useState(false);
 
   const [codigoBarra, setCodigoBarra] = useState("");
   const [productoDetectado, setProductoDetectado] = useState(null);
@@ -61,6 +64,11 @@ function RegistrarVenta() {
       if (decoded.sucursal_id && decoded.rol !== "admin") {
         setSucursalId(String(decoded.sucursal_id));
       }
+      if (decoded.rol === "vendedor") {
+        axios.get("/vendedores/mis-precios")
+          .then((r) => setPreciosVendedor(r.data || {}))
+          .catch(() => toast.error("❌ No se pudieron cargar tus precios"));
+      }
     }
 
     const fetchSucursales = async () => {
@@ -99,6 +107,7 @@ function RegistrarVenta() {
 
     // reset dependiente de sucursal
     setGustoId("");
+    setModeloId("");
     setCodigoBarra("");
     setProductoDetectado(null);
 
@@ -146,6 +155,7 @@ function RegistrarVenta() {
 
         const data = res.data;
         setGustoId(String(data.gusto_id));
+        if (data.producto_id) setModeloId(String(data.producto_id));
         setProductoDetectado(`${data.producto_nombre} - ${data.gusto}`);
 
         // ✅ sincroniza autocomplete con el detectado
@@ -153,8 +163,6 @@ function RegistrarVenta() {
         setIsOpen(false);
         setHighlightIndex(-1);
 
-        // Pre-llenar precio si viene en la respuesta
-        if (data.precio != null) setPrecioVenta(String(data.precio));
       } catch (err) {
         if (requestId !== lastScanRequestId.current) return;
 
@@ -213,6 +221,32 @@ function RegistrarVenta() {
     return gustos.find((g) => String(g.gusto_id) === String(gustoId)) || null;
   }, [gustos, gustoId]);
 
+  const esVendedor = rol === "vendedor";
+
+  // Vendedor: primero el modelo, después el sabor. Así no se confunde un
+  // "Blue Razz" de un modelo con el de otro, y solo aparece lo que tiene stock.
+  const modelos = useMemo(() => {
+    const porId = new Map();
+    for (const g of gustos) {
+      if (Number(g.stock) <= 0) continue;
+      const m = porId.get(g.producto_id) || { id: g.producto_id, nombre: g.producto_nombre, stock: 0 };
+      m.stock += Number(g.stock);
+      porId.set(g.producto_id, m);
+    }
+    return [...porId.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [gustos]);
+
+  const saboresDelModelo = useMemo(() => {
+    return gustos
+      .filter((g) => String(g.producto_id) === String(modeloId) && Number(g.stock) > 0)
+      .sort((a, b) => a.gusto.localeCompare(b.gusto));
+  }, [gustos, modeloId]);
+
+  const precioUnitario = seleccionado
+    ? (esVendedor ? preciosVendedor[seleccionado.producto_id] ?? null : Number(seleccionado.precio))
+    : null;
+  const sinPrecio = esVendedor && seleccionado && precioUnitario == null;
+
   // =========================
   // Autocomplete: cerrar al click afuera
   // =========================
@@ -237,8 +271,6 @@ function RegistrarVenta() {
     setQuery(labelGusto(g));
     setIsOpen(false);
     setHighlightIndex(-1);
-    // Pre-llenar precio con el precio del stock
-    if (g.precio != null) setPrecioVenta(String(g.precio));
   };
 
   const onKeyDownBuscar = (e) => {
@@ -285,16 +317,17 @@ function RegistrarVenta() {
   // =========================
   // Submit venta
   // =========================
+  const armarPayload = () => ({
+    gusto_id: Number(gustoId),
+    sucursal_id: Number(sucursalId),
+    cantidad: Number(cantidad),
+  });
+
   const registrarVenta = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (formDisabled) return;
 
-    const payload = {
-      gusto_id: Number(gustoId),
-      sucursal_id: Number(sucursalId),
-      cantidad: Number(cantidad),
-      ...(rol === "vendedor" && precioVenta !== "" ? { precio_unitario: Number(precioVenta) } : {}),
-    };
+    const payload = armarPayload();
 
     if (!payload.gusto_id || !payload.sucursal_id) {
       toast.error("❌ Seleccioná sucursal y producto");
@@ -311,6 +344,17 @@ function RegistrarVenta() {
       );
       return;
     }
+    if (sinPrecio) {
+      toast.error("❌ Este modelo no tiene precio de vendedor. Avisale al administrador.");
+      return;
+    }
+
+    // El vendedor revisa todo en grande antes de que se registre
+    if (esVendedor && !confirmando) {
+      setConfirmando(true);
+      return;
+    }
+    setConfirmando(false);
 
     try {
       setLoadingVenta(true);
@@ -319,8 +363,8 @@ function RegistrarVenta() {
       toast.success("Venta registrada correctamente");
 
       setCantidad(1);
-      setPrecioVenta("");
       setGustoId("");
+      setModeloId("");
       setCodigoBarra("");
       setProductoDetectado(null);
       setQuery("");
@@ -330,7 +374,7 @@ function RegistrarVenta() {
       await cargarGustosDisponibles(sucursalId);
       inputBuscarRef.current?.focus();
     } catch (err) {
-      toast.error("❌ Error al registrar venta");
+      toast.error(err?.response?.data?.error || "❌ Error al registrar venta");
       console.error("❌ Error detalle:", err);
     } finally {
       setLoadingVenta(false);
@@ -411,7 +455,49 @@ function RegistrarVenta() {
           )}
         </div>
 
+        {/* Vendedor: modelo y después sabor, solo lo que tiene stock */}
+        {esVendedor && (
+          <>
+            <div className="mb-3">
+              <label style={lStyle}>1. Modelo</label>
+              <select className="form-select" style={{ ...iStyle, backgroundImage: "none" }}
+                value={modeloId}
+                onChange={(e) => { setModeloId(e.target.value); setGustoId(""); setCantidad(1); }}
+                disabled={!sucursalId || loadingVenta || loadingGustos}>
+                <option value="">{loadingGustos ? "Cargando..." : "Elegí el modelo"}</option>
+                {modelos.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nombre} ({m.stock})</option>
+                ))}
+              </select>
+            </div>
+            {modeloId && (
+              <div className="mb-4">
+                <label style={lStyle}>2. Sabor</label>
+                <div className="d-flex flex-wrap gap-2">
+                  {saboresDelModelo.map((g) => {
+                    const activo = String(g.gusto_id) === String(gustoId);
+                    return (
+                      <button key={g.gusto_id} type="button"
+                        onClick={() => { setGustoId(String(g.gusto_id)); setCantidad(1); }}
+                        disabled={loadingVenta}
+                        style={{
+                          background: activo ? "#166534" : "#111827",
+                          border: `1px solid ${activo ? "#22c55e" : "#334155"}`,
+                          color: activo ? "#fff" : "#e2e8f0",
+                          borderRadius: 8, padding: "8px 12px", fontSize: "0.88rem",
+                        }}>
+                        {g.gusto} <span style={{ color: activo ? "#bbf7d0" : "#64748b" }}>· {g.stock}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Autocomplete */}
+        {!esVendedor && (
         <div className="mb-4" ref={autocompleteRef} style={{ position: "relative" }}>
           <div className="d-flex justify-content-between align-items-center mb-1">
             <label style={lStyle} className="mb-0">Buscar producto o gusto</label>
@@ -485,38 +571,37 @@ function RegistrarVenta() {
             </div>
           )}
         </div>
+        )}
 
-        {/* Precio de venta — solo vendedores */}
-        {gustoId && rol === "vendedor" && (
-          <div className="mb-4">
-            <label style={lStyle}>Precio de venta ($)</label>
-            <input
-              type="number"
-              className="form-control input-dark"
-              style={iStyle}
-              min="0"
-              step="0.01"
-              value={precioVenta}
-              onChange={(e) => setPrecioVenta(e.target.value)}
-              placeholder="Precio por unidad"
-              disabled={formDisabled}
-            />
-            {seleccionado?.precio != null && precioVenta !== "" && Number(precioVenta) !== Number(seleccionado.precio) && (
-              <div className="mt-1" style={{ fontSize: "0.75rem", color: "#f59e0b" }}>
-                ⚠ Precio de lista: ${Number(seleccionado.precio).toLocaleString("es-AR")}
-              </div>
-            )}
+        {/* Precio fijo del vendedor — no se edita */}
+        {gustoId && esVendedor && (
+          <div className="mb-4 px-3 py-2 rounded" style={{
+            background: sinPrecio ? "#3b1d1d" : "#0c1f3a",
+            border: `1px solid ${sinPrecio ? "#dc2626" : "#1e40af"}`,
+            color: sinPrecio ? "#fca5a5" : "#93c5fd", fontSize: "0.9rem",
+          }}>
+            {sinPrecio
+              ? "Este modelo todavía no tiene precio de vendedor. Avisale al administrador."
+              : <>Tu precio por unidad: <strong>${Number(precioUnitario).toLocaleString("es-AR")}</strong></>}
           </div>
         )}
 
         {/* Cantidad */}
         <div className="mb-4">
           <label style={lStyle}>Cantidad</label>
-          <input type="number" className="form-control input-dark" style={iStyle}
-            min="1" value={cantidad}
-            onChange={(e) => setCantidad(Number(e.target.value))}
-            required disabled={formDisabled || !gustoId}
-          />
+          <div className="d-flex gap-2">
+            <button type="button" className="btn" style={{ ...iStyle, width: 52, fontSize: "1.2rem" }}
+              onClick={() => setCantidad((c) => Math.max(1, Number(c) - 1))}
+              disabled={formDisabled || !gustoId}>−</button>
+            <input type="number" className="form-control input-dark text-center" style={iStyle}
+              min="1" max={seleccionado ? Number(seleccionado.stock) : undefined} value={cantidad}
+              onChange={(e) => setCantidad(Number(e.target.value))}
+              required disabled={formDisabled || !gustoId}
+            />
+            <button type="button" className="btn" style={{ ...iStyle, width: 52, fontSize: "1.2rem" }}
+              onClick={() => setCantidad((c) => Math.min(Number(seleccionado?.stock) || 1, Number(c) + 1))}
+              disabled={formDisabled || !gustoId}>+</button>
+          </div>
         </div>
 
         {/* Botón */}
@@ -529,11 +614,46 @@ function RegistrarVenta() {
             opacity: formDisabled || !gustoId ? 0.5 : 1,
             transition: "opacity 0.2s",
           }}
-          disabled={formDisabled || !gustoId}
+          disabled={formDisabled || !gustoId || sinPrecio}
         >
-          {loadingVenta ? "Registrando..." : "Confirmar Venta"}
+          {loadingVenta ? "Registrando..." : esVendedor ? "Revisar venta" : "Confirmar Venta"}
         </button>
       </form>
+
+      {/* Confirmación del vendedor: todo en grande antes de registrar */}
+      {confirmando && seleccionado && (
+        <div onClick={() => setConfirmando(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "#111827", border: "1px solid #334155", borderRadius: 14,
+            padding: 24, width: "100%", maxWidth: 420, color: "#e2e8f0",
+          }}>
+            <div style={{ ...lStyle, marginBottom: 12 }}>¿Está bien esta venta?</div>
+            <div style={{ fontSize: "0.95rem", color: "#94a3b8" }}>{seleccionado.producto_nombre}</div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: 12 }}>{seleccionado.gusto}</div>
+            <div className="d-flex justify-content-between" style={{ fontSize: "1.05rem" }}>
+              <span>Cantidad</span><strong>{cantidad}</strong>
+            </div>
+            <div className="d-flex justify-content-between" style={{ fontSize: "1.05rem" }}>
+              <span>Precio por unidad</span><strong>${Number(precioUnitario).toLocaleString("es-AR")}</strong>
+            </div>
+            <div className="d-flex justify-content-between mt-2 pt-2" style={{ borderTop: "1px solid #334155", fontSize: "1.3rem" }}>
+              <span>Total</span>
+              <strong style={{ color: "#22c55e" }}>${(Number(precioUnitario) * Number(cantidad)).toLocaleString("es-AR")}</strong>
+            </div>
+            <div className="d-flex gap-2 mt-4">
+              <button type="button" className="btn flex-fill" style={{ background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155" }}
+                onClick={() => setConfirmando(false)}>Volver</button>
+              <button type="button" className="btn flex-fill fw-semibold" style={{ background: "#16a34a", color: "#fff", border: "none" }}
+                onClick={() => registrarVenta()} disabled={loadingVenta}>
+                {loadingVenta ? "Registrando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
