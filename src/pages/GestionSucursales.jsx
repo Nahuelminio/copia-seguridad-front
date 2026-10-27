@@ -33,6 +33,26 @@ export default function GestionSucursales() {
   });
   const [creandoUsr, setCreandoUsr] = useState(false);
 
+  // Cambio de contraseña: un usuario abierto a la vez, con su campo al lado
+  const [claveDe, setClaveDe] = useState(null);
+  const [claveNueva, setClaveNueva] = useState("");
+  const [guardandoClave, setGuardandoClave] = useState(false);
+
+  const cambiarClave = async (u) => {
+    if (claveNueva.length < 6) return toast.error("La contraseña tiene que tener al menos 6 caracteres");
+    setGuardandoClave(true);
+    try {
+      await axios.patch(`/auth/usuarios/${u.id}/password`, { password: claveNueva });
+      toast.success(`Contraseña de ${u.email} cambiada`);
+      setClaveDe(null);
+      setClaveNueva("");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo cambiar la contraseña");
+    } finally {
+      setGuardandoClave(false);
+    }
+  };
+
   const cargarSucursales = useCallback(async () => {
     try {
       const r = await axios.get("/sucursales");
@@ -182,7 +202,22 @@ export default function GestionSucursales() {
                     <span style={{ color: "#64748b", fontSize: "0.78rem", minWidth: 110, textAlign: "right" }}>
                       {u.sucursal || "—"}
                     </span>
+                    <button className="btn btn-sm btn-outline-light" style={{ fontSize: "0.72rem", padding: "2px 8px" }}
+                      onClick={() => { setClaveDe(claveDe === u.id ? null : u.id); setClaveNueva(""); }}>
+                      {claveDe === u.id ? "Cancelar" : "Cambiar contraseña"}
+                    </button>
                   </span>
+                  {claveDe === u.id && (
+                    <form className="d-flex gap-2 w-100" style={{ marginTop: 6 }}
+                      onSubmit={(e) => { e.preventDefault(); cambiarClave(u); }}>
+                      <input className="form-control form-control-sm" style={inputDark} type="password"
+                        placeholder="Contraseña nueva (mínimo 6)" value={claveNueva} autoComplete="new-password"
+                        autoFocus onChange={(e) => setClaveNueva(e.target.value)} />
+                      <button className="btn btn-sm btn-success" type="submit" disabled={guardandoClave}>
+                        {guardandoClave ? "…" : "Guardar"}
+                      </button>
+                    </form>
+                  )}
                 </div>
               ))}
             </div>
