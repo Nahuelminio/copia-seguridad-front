@@ -101,6 +101,9 @@ function Navbar() {
                   routes={[
                     { path: "/productos",        label: "Productos",                  onClick: cerrarMenu },
                     { path: "/productosTotal",   label: "Pods por sucursal",          onClick: cerrarMenu },
+                    ...(rol === "sucursal" ? [
+                      { path: "/mis-transferencias", label: "Mis transferencias", onClick: cerrarMenu },
+                    ] : []),
                     ...(rol === "admin" ? [
                       { path: "/transferencias",       label: "Transferir entre sucursales", onClick: cerrarMenu },
                       { path: "/sucursales/gestionar", label: "Sucursales y usuarios",       onClick: cerrarMenu },

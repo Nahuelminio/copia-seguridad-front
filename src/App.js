@@ -22,6 +22,7 @@ import Login from "./pages/Login";
 import ResumenGanancias from "./pages/ResumenGanancias";
 
 import PrivateRoute from "./utils/PrivateRoute";
+import MisTransferencias from "./pages/MisTransferencias";
 import { getUsuario } from "./utils/auth";
 
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -159,6 +160,15 @@ function App() {
             element={
               <PrivateRoute>
                 <VentasMensuales />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/mis-transferencias"
+            element={
+              <PrivateRoute>
+                <MisTransferencias />
               </PrivateRoute>
             }
           />
