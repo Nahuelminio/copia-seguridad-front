@@ -16,4 +16,18 @@ instance.interceptors.request.use((config) => {
   (error) => Promise.reject(error)
 );
 
+// Si el servidor dice que el token no sirve (vencido o roto), se limpia y se
+// vuelve al login. Antes la pantalla quedaba vacía, fallando en cada pedido.
+instance.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const msg = error?.response?.data?.error || "";
+    if (error?.response?.status === 401 && /token/i.test(msg) && window.location.pathname !== "/login") {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default instance;
