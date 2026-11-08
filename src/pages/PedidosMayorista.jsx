@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import FacturaMayorista from "../components/FacturaMayorista";
 import { getUsuario } from "../utils/auth";
+import ResumenPorModelo from "../components/ResumenPorModelo";
 
 function useConfirm() {
   const [state, setState] = useState({ show: false, title: "", message: "", resolve: null });
@@ -132,6 +133,7 @@ function DetallePedido({ pedidoId, onVolver }) {
       modoVer={pedido.estado !== "pendiente"}
       onVolver={onVolver}
     />
+    <ResumenPorModelo items={pedido.items} />
     </>
   );
 }

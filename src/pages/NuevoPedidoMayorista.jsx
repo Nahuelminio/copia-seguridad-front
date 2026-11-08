@@ -4,6 +4,7 @@ import axios from "../utils/axiosInstance";
 import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import FacturaMayorista from "../components/FacturaMayorista";
+import ResumenPorModelo from "../components/ResumenPorModelo";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -577,6 +578,7 @@ export default function NuevoPedidoMayorista() {
           </div>
         </div>
       )}
+      {items.length > 0 && <div className="mb-4"><ResumenPorModelo items={items} /></div>}
 
       {/* ── Acciones ── */}
       <div className="d-flex gap-2 flex-wrap align-items-center">
