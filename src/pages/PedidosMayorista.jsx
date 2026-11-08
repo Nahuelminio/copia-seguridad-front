@@ -6,6 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import FacturaMayorista from "../components/FacturaMayorista";
 import { getUsuario } from "../utils/auth";
 import ResumenPorModelo from "../components/ResumenPorModelo";
+import PedidoArmadoYCobro from "../components/PedidoArmadoYCobro";
 
 function useConfirm() {
   const [state, setState] = useState({ show: false, title: "", message: "", resolve: null });
@@ -134,6 +135,7 @@ function DetallePedido({ pedidoId, onVolver }) {
       onVolver={onVolver}
     />
     <ResumenPorModelo items={pedido.items} />
+    <PedidoArmadoYCobro pedido={pedido} esAdmin={esAdmin} />
     </>
   );
 }
@@ -151,7 +153,8 @@ export default function PedidosMayorista() {
   const [pedidoDetalle, setPedidoDetalle] = useState(null);
   const [clientes, setClientes] = useState([]);                   // 6. lista clientes para filtro
   const [mostrarDropFiltro, setMostrarDropFiltro] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);            // loading en botón cancelar
+  const [deletingId, setDeletingId] = useState(null);
+  const [estadoPedidos, setEstadoPedidos] = useState({});        // armado y saldo por pedido            // loading en botón cancelar
   const { showConfirm, confirmModal } = useConfirm();
 
   useEffect(() => {
@@ -169,6 +172,12 @@ export default function PedidosMayorista() {
       if (filtroCliente) params.set("cliente_id", filtroCliente);
       const res = await axios.get(`/mayorista/pedidos?${params}`);
       setPedidos(res.data.data || []);
+      const ids = (res.data.data || []).map((p) => p.id).join(",");
+      if (ids) {
+        axios.get(`/mayorista/pedidos-estado?ids=${ids}`)
+          .then((r) => setEstadoPedidos(r.data || {}))
+          .catch(() => {});
+      }
       setTotalPages(res.data.totalPages || 1);
     } catch {
       toast.error("Error al cargar pedidos");
@@ -313,6 +322,8 @@ export default function PedidosMayorista() {
                 <th className="text-end">Costo</th>
                 <th className="text-end">Ganancia</th>
                 <th className="text-center">Estado</th>
+                <th className="text-center">Armado</th>
+                <th className="text-end">Debe</th>
                 <th></th>
               </tr>
             </thead>
@@ -362,6 +373,21 @@ export default function PedidosMayorista() {
                       {p.estado}
                     </span>
                   </td>
+                  {(() => {
+                    const e = estadoPedidos[p.id];
+                    if (!e || p.estado === "cancelado") return <><td /><td /></>;
+                    const completo = e.renglones > 0 && e.armados === e.renglones;
+                    return (
+                      <>
+                        <td className="text-center" style={{ fontSize: "0.82rem", color: completo ? "#4ade80" : e.armados ? "#fbbf24" : "#64748b" }}>
+                          {completo ? "✓" : `${e.armados}/${e.renglones}`}
+                        </td>
+                        <td className="text-end" style={{ fontSize: "0.85rem", color: e.saldo_usd > 0 ? "#f87171" : "#64748b" }}>
+                          {e.saldo_usd > 0 ? `USD ${formatUsd(e.saldo_usd)}` : "—"}
+                        </td>
+                      </>
+                    );
+                  })()}
                   <td>
                     <div className="d-flex gap-1 justify-content-end">
                       <button

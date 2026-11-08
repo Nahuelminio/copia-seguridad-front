@@ -23,6 +23,7 @@ import ResumenGanancias from "./pages/ResumenGanancias";
 
 import PrivateRoute from "./utils/PrivateRoute";
 import MisTransferencias from "./pages/MisTransferencias";
+import ClientesMayoristas from "./pages/ClientesMayoristas";
 import { getUsuario } from "./utils/auth";
 
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -226,6 +227,14 @@ function App() {
           />
 
           {/* Mayorista */}
+          <Route
+            path="/mayorista/clientes"
+            element={
+              <PrivateRoute>
+                <ClientesMayoristas />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/mayorista/lista"
             element={

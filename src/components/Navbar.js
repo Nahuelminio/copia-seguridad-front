@@ -152,6 +152,7 @@ function Navbar() {
                     { path: "/mayorista/nuevo",     label: "Nuevo pedido",       onClick: cerrarMenu },
                     ...(rol === "admin" ? [
                       { path: "/mayorista/dashboard", label: "Dashboard mayorista", onClick: cerrarMenu },
+                      { path: "/mayorista/clientes",  label: "Clientes y deudas",   onClick: cerrarMenu },
                     ] : []),
                   ]}
                 />
